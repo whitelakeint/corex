@@ -657,7 +657,8 @@
   /* ========================
      GLOBAL VARIABLES
      ======================== */
-  const API_BASE = window.location.origin;
+  // const API_BASE = window.location.origin;
+  API_BASE = 'http://localhost:8001'
   let conversationId = null;
   let conversationUrl = null;
   let dailyCall = null;
@@ -682,6 +683,17 @@
   const loginError = document.getElementById("login-error");
   const loginUser = document.getElementById("login-user");
   const loginPass = document.getElementById("login-pass");
+
+  // Check for existing session cookie — skip login if present
+  var hasSession = document.cookie.split(";").some(function(c) {
+    return c.trim().indexOf("concierge_session=") === 0;
+  });
+
+  if (hasSession && !resumeConversationId) {
+    console.log("[Session] Existing session found, skipping login");
+    loginScreen.style.display = "none";
+    appScreen.classList.add("visible");
+  }
 
   // Auto-bypass login and start fresh conversation when returning from Jitsi
   if (resumeConversationId) {
@@ -715,6 +727,10 @@
     const pass = loginPass.value;
 
     if (user === VALID_USER && pass === VALID_PASS) {
+      // Set session cookie — expires in 7 days
+      var expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString();
+      document.cookie = "concierge_session=1; expires=" + expires + "; path=/; SameSite=Strict";
+
       loginError.classList.remove("visible");
       loginScreen.classList.add("hidden");
       setTimeout(() => {
@@ -753,6 +769,9 @@
     conversationId = null;
     clearError();
     setStatus("Ready", "");
+
+    // Clear session cookie
+    document.cookie = "concierge_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Strict";
 
     // Hide app screen and show login screen
     appScreen.classList.remove("visible");
@@ -905,15 +924,14 @@
         .then(function (res) { return res.json(); })
         .then(function (data) {
           if (data.meeting_url) {
-            // Wait 5 seconds for avatar to complete speaking before transitioning
             console.log("[Escalation] Waiting for avatar to finish speaking...");
-            setTimeout(function() {
+            waitForAvatarDone(function() {
               handleEscalation({
                 meeting_url: data.meeting_url,
                 room_id: data.room_id,
                 reason: args.reason || "",
               });
-            }, 5000);
+            });
           }
         })
         .catch(function (err) {
@@ -949,6 +967,49 @@
      JITSI ESCALATION LOGIC
      ======================== */
 
+  // Wait until the avatar finishes speaking, then invoke the callback.
+  // Listens for utterance events — when no new speech arrives for 2s, it's done.
+  // Falls back after 30s max to avoid hanging forever.
+  function waitForAvatarDone(callback) {
+    var silenceTimer = null;
+    var maxTimer = null;
+    var listener = null;
+    var called = false;
+
+    function finish() {
+      if (called) return;
+      called = true;
+      clearTimeout(silenceTimer);
+      clearTimeout(maxTimer);
+      if (listener && dailyCall) {
+        dailyCall.off("app-message", listener);
+      }
+      console.log("[Escalation] Avatar finished speaking, proceeding in 2s...");
+      setTimeout(callback, 2000);
+    }
+
+    // Each time the avatar speaks, reset the silence timer
+    listener = function(event) {
+      var msg = event.data;
+      if (!msg) return;
+      var eventType = msg.event_type || "";
+      if (eventType === "conversation.utterance" && msg.properties && msg.properties.role === "replica") {
+        clearTimeout(silenceTimer);
+        silenceTimer = setTimeout(finish, 2000);
+      }
+    };
+
+    if (dailyCall) {
+      dailyCall.on("app-message", listener);
+    }
+
+    // Start an initial silence timer — if the avatar never speaks, proceed after 5s
+    silenceTimer = setTimeout(finish, 5000);
+
+    // Hard max wait to avoid hanging indefinitely
+    maxTimer = setTimeout(finish, 30000);
+  }
+
   function handleEscalation(data) {
     // Show escalation banner
     var banner = document.getElementById("escalation-banner");
@@ -958,14 +1019,13 @@
 
     setStatus("Escalating...", "connecting");
 
-    // LEAVE the Daily call completely so avatar stops listening
+    // Hide and mute the Daily call — keep the session alive so we can resume
     if (dailyCall) {
-      dailyCall.leave().then(function() {
-        console.log("[Tavus] Left call - avatar is now paused");
-      }).catch(function(err) {
-        console.error("[Tavus] Error leaving call:", err);
-      });
-      // Note: We keep the dailyCall object and conversationUrl to rejoin later
+      dailyCall.setLocalAudio(false);
+      dailyCall.setLocalVideo(false);
+      var dailyIframe = dailyCall.iframe();
+      if (dailyIframe) dailyIframe.style.display = "none";
+      console.log("[Tavus] Call hidden and muted - session stays alive");
     }
 
     // Create Jitsi container
@@ -1019,17 +1079,21 @@
       banner.classList.remove("visible");
     });
 
-    // Handle when customer is kicked by agent - automatically resume
-    jitsiApi.addEventListener("participantKickedOut", function () {
-      console.log("[Jitsi] Customer was kicked - resuming conversation");
-      alert("I got kicked out")
+    // Handle when the local user leaves the conference (includes being kicked)
+    var jitsiResumed = false;
+    function jitsiResume(reason) {
+      if (jitsiResumed) return;
+      jitsiResumed = true;
+      console.log("[Jitsi] " + reason + " - resuming conversation");
       resumeTavusConversation();
+    }
+
+    jitsiApi.addEventListener("videoConferenceLeft", function (event) {
+      jitsiResume("Local user left conference (kicked or hangup)");
     });
 
-    // Fallback: Handle normal Jitsi call end - resume Tavus conversation
     jitsiApi.addEventListener("readyToClose", function () {
-      console.log("[Jitsi] Call ended - resuming conversation");
-      resumeTavusConversation();
+      jitsiResume("Jitsi ready to close");
     });
 
     // Hide end button during Jitsi call
@@ -1049,43 +1113,21 @@
 
     document.getElementById("escalation-banner").classList.remove("visible");
 
-    // Rejoin the Daily call to resume Tavus conversation
-    if (dailyCall && conversationUrl) {
-      setStatus("Resuming...", "connecting");
+    // Unhide and unmute the Daily call — session was kept alive
+    if (dailyCall) {
+      var dailyIframe = dailyCall.iframe();
+      if (dailyIframe) dailyIframe.style.display = "";
+      dailyCall.setLocalAudio(true);
+      dailyCall.setLocalVideo(true);
 
-      var meetingState = dailyCall.meetingState();
-      console.log("[Resume] Current meeting state:", meetingState);
-
-      // Pre-start camera to skip prejoin screen
-      dailyCall.startCamera({
-        url: conversationUrl
-      }).then(function() {
-        console.log("[Resume] Camera started, now joining...");
-        return dailyCall.join({ url: conversationUrl });
-      }).then(function() {
-        console.log("[Tavus] Rejoined conversation - avatar is now active");
-        setStatus("Active", "active");
-        btnEnd.style.display = "inline-block";
-      }).catch(function(err) {
-        console.error("[Tavus] Error rejoining:", err);
-        // If startCamera fails, try direct join as fallback
-        dailyCall.join({ url: conversationUrl }).then(function() {
-          console.log("[Tavus] Rejoined conversation (fallback) - avatar is now active");
-          setStatus("Active", "active");
-          btnEnd.style.display = "inline-block";
-        }).catch(function(err2) {
-          console.error("[Tavus] Error rejoining (fallback):", err2);
-          showError("Failed to resume conversation. Please start a new one.");
-          endEverything();
-        });
-      });
+      console.log("[Resume] Tavus conversation resumed");
+      setStatus("Active", "active");
+      btnEnd.style.display = "inline-block";
     } else {
-      console.error("[Tavus] Cannot resume - no conversation URL stored");
+      console.error("[Resume] No active Daily call to resume");
       showError("Cannot resume conversation. Please start a new one.");
       endEverything();
     }
-
-    console.log("[Resume] Attempting to resume Tavus conversation");
   }
 
   function endEverything() {
