@@ -1063,8 +1063,39 @@
       },
     });
 
-    // When Jitsi is ready, send the redirect URL as a chat message for the agent
+    // When Jitsi is ready, check if a human agent is already in the room
+    var agentFound = false;
+    var agentCheckTimer = null;
+
     jitsiApi.addEventListener("videoConferenceJoined", function () {
+      // Check current participant count (includes self)
+      var count = jitsiApi.getNumberOfParticipants();
+      console.log("[Jitsi] Joined room, participants:", count);
+
+      if (count > 1) {
+        // Agent is already here
+        agentFound = true;
+        setStatus("Agent Connected", "active");
+        banner.classList.remove("visible");
+      } else {
+        // No agent yet — wait up to 10 seconds for one to appear
+        setStatus("Waiting for Agent...", "connecting");
+        reasonEl.textContent = "Checking if a human agent is available...";
+
+        agentCheckTimer = setTimeout(function() {
+          if (!agentFound) {
+            console.log("[Jitsi] No agent available after timeout");
+            reasonEl.textContent = "Sorry, no human agent is available to receive your call right now.";
+            banner.classList.add("visible");
+
+            // Wait 3 seconds so user can read the message, then resume avatar
+            setTimeout(function() {
+              jitsiResume("No agent available");
+            }, 3000);
+          }
+        }, 10000);
+      }
+
       // Send chat message with redirect URL
       setTimeout(function () {
         jitsiApi.executeCommand("sendChatMessage",
@@ -1073,8 +1104,10 @@
       }, 1000);
     });
 
-    // Update status when agent joins
+    // Update status when agent joins (during or after the wait)
     jitsiApi.addEventListener("participantJoined", function () {
+      agentFound = true;
+      clearTimeout(agentCheckTimer);
       setStatus("Agent Connected", "active");
       banner.classList.remove("visible");
     });
