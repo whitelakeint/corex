@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Core X Concierge Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://meet.whitelakedigital.com/external_api.js"></script>
+  <script src="/frontend/daily-iframe.js"></script>
+  <style>
+    :root {
+      --primary: #1a3a5c;
+      --primary-light: #2c5a8a;
+      --accent: #c9a96e;
+      --accent-light: #dfc48e;
+      --bg: #f5f3ef;
+      --card-bg: #ffffff;
+      --text: #2c2c2c;
+      --text-muted: #6b6b6b;
+      --radius: 12px;
+
+      /* Login palette */
+      --login-bg: #0d1b2a;
+      --login-bg-mid: #132d46;
+      --login-surface: rgba(255, 255, 255, 0.04);
+      --login-border: rgba(201, 169, 110, 0.25);
+      --login-text: #e8e4dc;
+      --login-text-dim: rgba(232, 228, 220, 0.5);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: "DM Sans", "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* =====================================================
+       LOGIN SCREEN
+       ===================================================== */
+
+    #login-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--login-bg);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+
+    #login-screen.hidden {
+      opacity: 0;
+      transform: scale(1.02);
+      pointer-events: none;
+    }
+
+    /* Geometric background pattern — art deco lines */
+    .login-bg-pattern {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      opacity: 0.06;
+    }
+
+    .login-bg-pattern::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background:
+        repeating-linear-gradient(
+          0deg,
+          transparent,
+          transparent 80px,
+          var(--accent) 80px,
+          var(--accent) 81px
+        ),
+        repeating-linear-gradient(
+          90deg,
+          transparent,
+          transparent 80px,
+          var(--accent) 80px,
+          var(--accent) 81px
+        );
+      transform: rotate(45deg);
+    }
+
+    /* Radial glow behind the card */
+    .login-glow {
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(201, 169, 110, 0.08) 0%, transparent 70%);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    /* Login card */
+    .login-card {
+      position: relative;
+      width: 100%;
+      max-width: 420px;
+      margin: 1.5rem;
+      padding: 3rem 2.5rem 2.5rem;
+      background: var(--login-surface);
+      border: 1px solid var(--login-border);
+      border-radius: 2px;
+      backdrop-filter: blur(20px);
+      animation: cardReveal 0.8s ease-out both;
+    }
+
+    @keyframes cardReveal {
+      from {
+        opacity: 0;
+        transform: translateY(24px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Decorative corner accents */
+    .login-card::before,
+    .login-card::after {
+      content: '';
+      position: absolute;
+      width: 32px;
+      height: 32px;
+      border-color: var(--accent);
+      border-style: solid;
+    }
+
+    .login-card::before {
+      top: -1px;
+      left: -1px;
+      border-width: 2px 0 0 2px;
+    }
+
+    .login-card::after {
+      bottom: -1px;
+      right: -1px;
+      border-width: 0 2px 2px 0;
+    }
+
+    /* Monogram / Brand mark */
+    .login-monogram {
+      text-align: center;
+      margin-bottom: 2rem;
+      animation: cardReveal 0.8s ease-out 0.15s both;
+    }
+
+    .login-monogram-mark {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 56px;
+      height: 56px;
+      border: 1.5px solid var(--accent);
+      border-radius: 50%;
+      margin-bottom: 1rem;
+    }
+
+    .login-monogram-mark span {
+      font-family: "Playfair Display", Georgia, serif;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.02em;
+    }
+
+    .login-monogram h2 {
+      font-family: "Playfair Display", Georgia, serif;
+      font-size: 1.6rem;
+      font-weight: 600;
+      color: var(--login-text);
+      letter-spacing: 0.04em;
+      margin-bottom: 0.35rem;
+    }
+
+    .login-monogram p {
+      font-size: 0.78rem;
+      color: var(--login-text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.22em;
+      font-weight: 500;
+    }
+
+    /* Divider line */
+    .login-divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--login-border), transparent);
+      margin-bottom: 2rem;
+      animation: cardReveal 0.8s ease-out 0.25s both;
+    }
+
+    /* Form fields */
+    .login-form {
+      animation: cardReveal 0.8s ease-out 0.3s both;
+    }
+
+    .login-field {
+      margin-bottom: 1.25rem;
+    }
+
+    .login-field label {
+      display: block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--login-text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin-bottom: 0.5rem;
+    }
+
+    .login-field input {
+      width: 100%;
+      padding: 0.8rem 1rem;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(201, 169, 110, 0.15);
+      border-radius: 2px;
+      color: var(--login-text);
+      font-family: "DM Sans", sans-serif;
+      font-size: 0.95rem;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+      outline: none;
+    }
+
+    .login-field input::placeholder {
+      color: rgba(232, 228, 220, 0.2);
+    }
+
+    .login-field input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(201, 169, 110, 0.1);
+    }
+
+    /* Error state */
+    .login-error {
+      color: #e07a5f;
+      font-size: 0.8rem;
+      text-align: center;
+      margin-bottom: 1rem;
+      min-height: 1.2em;
+      transition: opacity 0.3s ease;
+      opacity: 0;
+    }
+
+    .login-error.visible {
+      opacity: 1;
+      animation: shake 0.4s ease;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-6px); }
+      40% { transform: translateX(6px); }
+      60% { transform: translateX(-4px); }
+      80% { transform: translateX(4px); }
+    }
+
+    /* Submit button */
+    .login-btn {
+      width: 100%;
+      padding: 0.85rem 1.5rem;
+      background: transparent;
+      border: 1.5px solid var(--accent);
+      border-radius: 2px;
+      color: var(--accent);
+      font-family: "DM Sans", sans-serif;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      cursor: pointer;
+      transition: all 0.35s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .login-btn::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(201, 169, 110, 0.15), transparent);
+      transition: left 0.5s ease;
+    }
+
+    .login-btn:hover {
+      background: var(--accent);
+      color: var(--login-bg);
+    }
+
+    .login-btn:hover::before {
+      left: 100%;
+    }
+
+    .login-btn:active {
+      transform: scale(0.98);
+    }
+
+    /* Footer text on login */
+    .login-footer {
+      text-align: center;
+      margin-top: 2rem;
+      font-size: 0.7rem;
+      color: var(--login-text-dim);
+      letter-spacing: 0.08em;
+      animation: cardReveal 0.8s ease-out 0.45s both;
+    }
+
+    /* =====================================================
+       APP SCREEN (existing concierge UI)
+       ===================================================== */
+
+    #app-screen {
+      display: none;
+      flex-direction: column;
+      min-height: 100vh;
+      animation: appFadeIn 0.5s ease-out both;
+    }
+
+    #app-screen.visible {
+      display: flex;
+    }
+
+    @keyframes appFadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* ----- existing styles below ----- */
+
+    header {
+      background: var(--primary);
+      color: #fff;
+      padding: 1.25rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    #btn-logout {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 0.5rem 1rem;
+      font-size: 0.8rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    #btn-logout:hover {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    header h1 {
+      font-family: "Playfair Display", Georgia, serif;
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    header .subtitle {
+      font-size: 0.85rem;
+      opacity: 0.8;
+      font-weight: 400;
+    }
+
+    .badge {
+      background: var(--accent);
+      color: var(--primary);
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.3rem 0.75rem;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+      width: 100%;
+      max-width: 900px;
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 1.5rem 2rem;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-header h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    #status {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    #status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ccc;
+      display: inline-block;
+    }
+
+    #status-dot.active { background: #34c759; }
+    #status-dot.connecting { background: #ff9500; animation: pulse 1s infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .card-body {
+      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+      min-height: 500px;
+      justify-content: center;
+    }
+
+    .card-body.has-iframe {
+      padding: 0;
+      min-height: 540px;
+    }
+
+    #avatar-frame {
+      width: 100%;
+      height: 540px;
+      border: none;
+      display: block;
+    }
+
+    .welcome-text {
+      text-align: center;
+      max-width: 420px;
+    }
+
+    .welcome-text h3 {
+      font-family: "Playfair Display", Georgia, serif;
+      font-size: 1.2rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .welcome-text p {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+
+    .actions {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      padding: 0.75rem 1.75rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      font-family: "DM Sans", sans-serif;
+      transition: background 0.2s, opacity 0.2s;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    #btn-start {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    #btn-start:hover:not(:disabled) {
+      background: var(--primary-light);
+    }
+
+    #btn-end {
+      background: #e8e8e8;
+      color: var(--text);
+      display: none;
+    }
+
+    #btn-end:hover:not(:disabled) {
+      background: #d4d4d4;
+    }
+
+    .error-msg {
+      color: #d32f2f;
+      font-size: 0.85rem;
+      text-align: center;
+    }
+
+    /* Escalation transition banner */
+    .escalation-banner {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      color: #fff;
+      padding: 1rem 2rem;
+      text-align: center;
+      font-size: 0.9rem;
+      display: none;
+    }
+    .escalation-banner.visible { display: block; }
+    .escalation-banner p { margin: 0.25rem 0; }
+    .escalation-banner .reason { opacity: 0.8; font-size: 0.8rem; }
+
+
+    #jitsi-container {
+      width: 100%;
+      height: 540px;
+    }
+
+    footer {
+      text-align: center;
+      padding: 1rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ==================== LOGIN SCREEN ==================== -->
+<div id="login-screen">
+  <div class="login-bg-pattern"></div>
+  <div class="login-glow"></div>
+
+  <div class="login-card">
+    <div class="login-monogram">
+      <div class="login-monogram-mark"><span>X</span></div>
+      <h2>Core X</h2>
+      <p>Concierge Portal</p>
+    </div>
+
+    <div class="login-divider"></div>
+
+    <form class="login-form" id="login-form" autocomplete="off">
+      <div class="login-field">
+        <label for="login-user">Username</label>
+        <input type="text" id="login-user" placeholder="Enter username" autofocus />
+      </div>
+      <div class="login-field">
+        <label for="login-pass">Password</label>
+        <input type="password" id="login-pass" placeholder="Enter password" />
+      </div>
+      <p class="login-error" id="login-error">Invalid credentials. Please try again.</p>
+      <button type="submit" class="login-btn">Enter</button>
+    </form>
+
+    <p class="login-footer">Authorized personnel only</p>
+  </div>
+</div>
+
+<!-- ==================== APP SCREEN ==================== -->
+<div id="app-screen">
+  <header>
+    <div>
+      <h1>Core X</h1>
+      <span class="subtitle">Concierge Portal</span>
+    </div>
+    <div class="header-right">
+      <span class="badge">AI Assisted</span>
+      <button id="btn-logout">Logout</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="card">
+      <div class="card-header">
+        <h2>Lobby Concierge</h2>
+        <div id="status">
+          <span id="status-dot"></span>
+          <span id="status-label">Ready</span>
+        </div>
+      </div>
+      <div class="escalation-banner" id="escalation-banner">
+        <p>Connecting you with a team member...</p>
+        <p class="reason" id="escalation-reason"></p>
+      </div>
+      <div class="card-body" id="card-body">
+        <div class="welcome-text" id="welcome">
+          <h3>Welcome to Core X</h3>
+          <p>
+            Our virtual concierge can help you with visitor check-in, building
+            directions, leasing inquiries, package drop-offs, and more.
+          </p>
+        </div>
+        <div class="actions" id="actions">
+          <button id="btn-start">Start Conversation</button>
+          <button id="btn-end">End Conversation</button>
+        </div>
+        <p class="error-msg" id="error" style="display:none"></p>
+      </div>
+    </div>
+  </main>
+
+  <footer>Powered by Tavus CVI</footer>
+</div>
+
+<script>
+  /* ========================
+     GLOBAL VARIABLES
+     ======================== */
+  const API_BASE = window.location.origin;
+  let conversationId = null;
+  let conversationUrl = null;
+  let dailyCall = null;
+  let jitsiApi = null;
+
+  /* ========================
+     AUTO-RESUME FROM JITSI
+     ======================== */
+  // Check if user is returning from Jitsi redirect
+  var urlParams = new URLSearchParams(window.location.search);
+  var resumeConversationId = urlParams.get('resume');
+
+  /* ========================
+     LOGIN LOGIC
+     ======================== */
+  const VALID_USER = "admin";
+  const VALID_PASS = "meridian";
+
+  const loginScreen = document.getElementById("login-screen");
+  const appScreen = document.getElementById("app-screen");
+  const loginForm = document.getElementById("login-form");
+  const loginError = document.getElementById("login-error");
+  const loginUser = document.getElementById("login-user");
+  const loginPass = document.getElementById("login-pass");
+
+  // Auto-bypass login and start fresh conversation when returning from Jitsi
+  if (resumeConversationId) {
+    console.log("[Resume] Auto-login and starting fresh conversation");
+
+    // Hide login, show app immediately
+    loginScreen.style.display = "none";
+    appScreen.classList.add("visible");
+
+    // Show welcome message
+    setTimeout(function() {
+      var banner = document.getElementById("escalation-banner");
+      var reasonEl = document.getElementById("escalation-reason");
+      banner.classList.add("visible");
+      reasonEl.textContent = "Welcome back! Starting a fresh conversation...";
+
+      // Clear URL parameter
+      window.history.replaceState({}, document.title, window.location.pathname);
+
+      // Auto-click "Start Conversation" button after banner shows
+      setTimeout(function() {
+        banner.classList.remove("visible");
+        document.getElementById("btn-start").click();
+      }, 2000);
+    }, 500);
+  }
+
+  loginForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const user = loginUser.value.trim();
+    const pass = loginPass.value;
+
+    if (user === VALID_USER && pass === VALID_PASS) {
+      loginError.classList.remove("visible");
+      loginScreen.classList.add("hidden");
+      setTimeout(() => {
+        loginScreen.style.display = "none";
+        appScreen.classList.add("visible");
+      }, 600);
+    } else {
+      loginError.classList.add("visible");
+      loginPass.value = "";
+      loginPass.focus();
+    }
+  });
+
+  /* ========================
+     LOGOUT LOGIC
+     ======================== */
+  function logout() {
+    // End any active conversation first
+    if (conversationId) {
+      fetch(API_BASE + "/api/conversations/" + conversationId + "/end", {
+        method: "POST",
+      }).catch(() => {});
+    }
+
+    // Clean up everything
+    endEverything();
+
+    cardBody.classList.remove("has-iframe");
+    welcome.style.display = "block";
+    actions.style.display = "flex";
+    actions.style.padding = "";
+    btnStart.style.display = "inline-block";
+    btnStart.disabled = false;
+    btnEnd.style.display = "none";
+    btnEnd.disabled = false;
+    conversationId = null;
+    clearError();
+    setStatus("Ready", "");
+
+    // Hide app screen and show login screen
+    appScreen.classList.remove("visible");
+    loginScreen.style.display = "flex";
+    setTimeout(() => {
+      loginScreen.classList.remove("hidden");
+      loginUser.value = "";
+      loginPass.value = "";
+      loginError.classList.remove("visible");
+      loginUser.focus();
+    }, 50);
+  }
+
+  /* ========================
+     CONVERSATION LOGIC
+     ======================== */
+  const btnStart = document.getElementById("btn-start");
+  const btnEnd = document.getElementById("btn-end");
+  const cardBody = document.getElementById("card-body");
+  const welcome = document.getElementById("welcome");
+  const actions = document.getElementById("actions");
+  const statusDot = document.getElementById("status-dot");
+  const statusLabel = document.getElementById("status-label");
+  const errorEl = document.getElementById("error");
+
+  function setStatus(label, state) {
+    statusDot.className = state || "";
+    statusLabel.textContent = label;
+  }
+
+  function showError(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.display = "block";
+  }
+
+  function clearError() {
+    errorEl.style.display = "none";
+  }
+
+  btnStart.addEventListener("click", async () => {
+    clearError();
+    btnStart.disabled = true;
+    setStatus("Connecting...", "connecting");
+
+    // Check if Daily.js is loaded
+    if (!window.Daily) {
+      showError("Failed to load Daily.js library. Please refresh the page.");
+      btnStart.disabled = false;
+      setStatus("Error", "");
+      return;
+    }
+
+    try {
+      const res = await fetch(API_BASE + "/api/conversations", { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Server error " + res.status);
+      }
+
+      const data = await res.json();
+      conversationId = data.conversation_id;
+      conversationUrl = data.conversation_url;  // Store for later rejoin
+
+      if (!conversationUrl) throw new Error("No conversation URL returned");
+
+      // Switch to Daily call view
+      welcome.style.display = "none";
+      actions.style.display = "none";
+      cardBody.classList.add("has-iframe");
+
+      // Use Daily JS SDK to join the Tavus conversation
+      dailyCall = window.Daily.createFrame(cardBody, {
+        iframeStyle: {
+          width: "100%",
+          height: "540px",
+          border: "none",
+        },
+        showLeaveButton: false,
+        showFullscreenButton: false,
+        showParticipantsBar: false,
+      });
+
+      // Listen for tool call events from Tavus CVI
+      dailyCall.on("app-message", function (event) {
+        var msg = event.data;
+        if (!msg) return;
+
+        // Log non-utterance events for debugging
+        if (msg.event_type && msg.event_type !== "conversation.utterance") {
+          console.log("[Daily app-message] event_type:", msg.event_type, msg);
+        }
+
+        // Detect tool call by event_type
+        if (msg.event_type === "conversation.tool_call" || msg.message_type === "tool_call") {
+          console.log("[Tool Call Event]", JSON.stringify(msg, null, 2));
+          handleToolCall(msg);
+          return;
+        }
+
+        // Fallback: check properties for tool-related fields
+        var props = msg.properties || {};
+        if (props.tool_name || props.function_name) {
+          console.log("[Tool Call via properties]", JSON.stringify(msg, null, 2));
+          handleToolCall({
+            function_name: props.tool_name || props.function_name,
+            function_args: props.arguments || props.function_args || {},
+          });
+        }
+      });
+
+      await dailyCall.join({ url: conversationUrl });
+
+      // Show end button below Daily frame
+      actions.style.display = "flex";
+      actions.style.padding = "1rem 2rem";
+      btnStart.style.display = "none";
+      btnEnd.style.display = "inline-block";
+
+      setStatus("Active", "active");
+    } catch (err) {
+      showError(err.message);
+      btnStart.disabled = false;
+      setStatus("Error", "");
+    }
+  });
+
+  function handleToolCall(msg) {
+    var props = msg.properties || {};
+    var toolName = msg.function_name || msg.tool_name || msg.name
+      || props.function_name || props.tool_name || props.name || "";
+    var args = msg.function_args || msg.arguments || msg.args
+      || props.function_args || props.arguments || props.args || {};
+
+    console.log("[Tool Call] name:", toolName, "args:", args);
+
+    if (typeof args === "string") {
+      try { args = JSON.parse(args); } catch (e) {}
+    }
+
+    if (toolName === "escalate_to_human") {
+      // Call backend to create Jitsi room
+      fetch(API_BASE + "/api/escalate-to-human", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reason: args.reason || "User needs human assistance",
+          user_question: args.user_question || "",
+        }),
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (data.meeting_url) {
+            // Wait 5 seconds for avatar to complete speaking before transitioning
+            console.log("[Escalation] Waiting for avatar to finish speaking...");
+            setTimeout(function() {
+              handleEscalation({
+                meeting_url: data.meeting_url,
+                room_id: data.room_id,
+                reason: args.reason || "",
+              });
+            }, 5000);
+          }
+        })
+        .catch(function (err) {
+          console.error("Escalation API error:", err);
+        });
+    }
+  }
+
+  btnEnd.addEventListener("click", async () => {
+    btnEnd.disabled = true;
+    setStatus("Ending...", "connecting");
+
+    try {
+      if (conversationId) {
+        await fetch(API_BASE + "/api/conversations/" + conversationId + "/end", {
+          method: "POST",
+        });
+      }
+    } catch (_) {
+      // Best-effort
+    }
+
+    endEverything();
+  });
+
+  /* ========================
+     LOGOUT BUTTON
+     ======================== */
+  const btnLogout = document.getElementById("btn-logout");
+  btnLogout.addEventListener("click", logout);
+
+  /* ========================
+     JITSI ESCALATION LOGIC
+     ======================== */
+
+  function handleEscalation(data) {
+    // Show escalation banner
+    var banner = document.getElementById("escalation-banner");
+    var reasonEl = document.getElementById("escalation-reason");
+    banner.classList.add("visible");
+    reasonEl.textContent = data.reason || "";
+
+    setStatus("Escalating...", "connecting");
+
+    // LEAVE the Daily call completely so avatar stops listening
+    if (dailyCall) {
+      dailyCall.leave().then(function() {
+        console.log("[Tavus] Left call - avatar is now paused");
+      }).catch(function(err) {
+        console.error("[Tavus] Error leaving call:", err);
+      });
+      // Note: We keep the dailyCall object and conversationUrl to rejoin later
+    }
+
+    // Create Jitsi container
+    var jitsiContainer = document.createElement("div");
+    jitsiContainer.id = "jitsi-container";
+    cardBody.insertBefore(jitsiContainer, cardBody.firstChild);
+
+    // Extract room name from meeting_url
+    var urlParts = data.meeting_url.split("/");
+    var roomName = urlParts[urlParts.length - 1];
+
+    // Build redirect URL that agent can use to send customer back
+    var redirectUrl = window.location.origin + "/?resume=" + conversationId;
+
+    // Initialize Jitsi with display name and subject showing redirect URL
+    jitsiApi = new JitsiMeetExternalAPI("meet.whitelakedigital.com", {
+      roomName: roomName,
+      parentNode: jitsiContainer,
+      userInfo: {
+        displayName: "support-user"
+      },
+      configOverwrite: {
+        startWithAudioMuted: false,
+        startWithVideoMuted: false,
+        prejoinPageEnabled: false,
+        disableDeepLinking: true,
+        subject: "Customer Redirect: " + redirectUrl,
+      },
+      interfaceConfigOverwrite: {
+        TOOLBAR_BUTTONS: [
+          "microphone", "camera", "desktop", "chat",
+          "hangup", "fullscreen", "settings"
+        ],
+        SHOW_JITSI_WATERMARK: false,
+      },
+    });
+
+    // When Jitsi is ready, send the redirect URL as a chat message for the agent
+    jitsiApi.addEventListener("videoConferenceJoined", function () {
+      // Send chat message with redirect URL
+      setTimeout(function () {
+        jitsiApi.executeCommand("sendChatMessage",
+          "ℹ️ Customer return URL: " + redirectUrl + "\n\nKick the customer to redirect them back to the AI concierge."
+        );
+      }, 1000);
+    });
+
+    // Update status when agent joins
+    jitsiApi.addEventListener("participantJoined", function () {
+      setStatus("Agent Connected", "active");
+      banner.classList.remove("visible");
+    });
+
+    // Handle when customer is kicked by agent - automatically resume
+    jitsiApi.addEventListener("participantKickedOut", function () {
+      console.log("[Jitsi] Customer was kicked - resuming conversation");
+      alert("I got kicked out")
+      resumeTavusConversation();
+    });
+
+    // Fallback: Handle normal Jitsi call end - resume Tavus conversation
+    jitsiApi.addEventListener("readyToClose", function () {
+      console.log("[Jitsi] Call ended - resuming conversation");
+      resumeTavusConversation();
+    });
+
+    // Hide end button during Jitsi call
+    btnEnd.style.display = "none";
+
+    setStatus("Waiting for Agent", "connecting");
+  }
+
+  function resumeTavusConversation() {
+    // Cleanup Jitsi
+    if (jitsiApi) {
+      jitsiApi.dispose();
+      jitsiApi = null;
+    }
+    var jitsiContainer = document.getElementById("jitsi-container");
+    if (jitsiContainer) jitsiContainer.remove();
+
+    document.getElementById("escalation-banner").classList.remove("visible");
+
+    // Rejoin the Daily call to resume Tavus conversation
+    if (dailyCall && conversationUrl) {
+      setStatus("Resuming...", "connecting");
+
+      var meetingState = dailyCall.meetingState();
+      console.log("[Resume] Current meeting state:", meetingState);
+
+      // Pre-start camera to skip prejoin screen
+      dailyCall.startCamera({
+        url: conversationUrl
+      }).then(function() {
+        console.log("[Resume] Camera started, now joining...");
+        return dailyCall.join({ url: conversationUrl });
+      }).then(function() {
+        console.log("[Tavus] Rejoined conversation - avatar is now active");
+        setStatus("Active", "active");
+        btnEnd.style.display = "inline-block";
+      }).catch(function(err) {
+        console.error("[Tavus] Error rejoining:", err);
+        // If startCamera fails, try direct join as fallback
+        dailyCall.join({ url: conversationUrl }).then(function() {
+          console.log("[Tavus] Rejoined conversation (fallback) - avatar is now active");
+          setStatus("Active", "active");
+          btnEnd.style.display = "inline-block";
+        }).catch(function(err2) {
+          console.error("[Tavus] Error rejoining (fallback):", err2);
+          showError("Failed to resume conversation. Please start a new one.");
+          endEverything();
+        });
+      });
+    } else {
+      console.error("[Tavus] Cannot resume - no conversation URL stored");
+      showError("Cannot resume conversation. Please start a new one.");
+      endEverything();
+    }
+
+    console.log("[Resume] Attempting to resume Tavus conversation");
+  }
+
+  function endEverything() {
+    // Cleanup Jitsi
+    if (jitsiApi) {
+      jitsiApi.dispose();
+      jitsiApi = null;
+    }
+    var jitsiContainer = document.getElementById("jitsi-container");
+    if (jitsiContainer) jitsiContainer.remove();
+
+    document.getElementById("escalation-banner").classList.remove("visible");
+
+    // End Daily call completely
+    if (dailyCall) {
+      dailyCall.leave().catch(function () {});
+      dailyCall.destroy();
+      dailyCall = null;
+    }
+
+    // Reset to initial state
+    cardBody.classList.remove("has-iframe");
+    welcome.style.display = "block";
+    actions.style.display = "flex";
+    actions.style.padding = "";
+    btnStart.style.display = "inline-block";
+    btnStart.disabled = false;
+    btnEnd.style.display = "none";
+    btnEnd.disabled = false;
+    conversationId = null;
+    conversationUrl = null;  // Clear stored URL
+    setStatus("Ready", "");
+  }
+</script>
+
+</body>
+</html>

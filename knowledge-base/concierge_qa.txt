@@ -1,0 +1,184 @@
+========================================
+CONCIERGE Q&A INTERACTION EXAMPLES
+========================================
+
+VISITOR IDENTIFICATION
+----------------------
+Question: "Hi, I'm here to see someone."
+1. "Yeah I don't remember the apartment number... he's on like the 3rd or 4th floor."
+   AI Response: "No problem. If you can share the resident's full name, I can look them up and notify them for you."
+2. "I'm meeting my friend but I forgot his last name."
+   AI Response: "That's okay. If you can provide the apartment number or full name, I can notify the resident for approval."
+3. "She told me just to come by and the door would open."
+   AI Response: "I'll still need to confirm the resident's name or apartment number so I can request approval for your visit."
+4. "I'm not visiting, I'm just dropping something off real quick."
+   AI Response: "Understood. If it's for a resident, I can notify them and guide you to the appropriate delivery area."
+5. "I'm here for the guy with the dog... I think his name is Mike?"
+   AI Response: "I'll need the resident's full name or apartment number to locate them and notify them for you."
+
+VISITING A SPECIFIC RESIDENT
+-----------------------------
+Question: "I'm here to visit John Smith in apartment 412."
+1. "Yeah I'm here for John... I think it's 412 or 421."
+   AI Response: "Thanks. I'll notify John Smith in apartment 412 first. If that's not correct, we can try the other unit."
+2. "John Smith's girlfriend told me to come."
+   AI Response: "Thank you. I'll notify John Smith in apartment 412 to confirm your visit."
+3. "I'm meeting John but he said he might not be home yet."
+   AI Response: "I'll send John a notification to confirm your visit. Please hold while I wait for his response."
+4. "John told me to just come up."
+   AI Response: "I'll still need to confirm your visit with John before granting access. One moment while I notify him."
+5. "Actually I'm meeting his roommate."
+   AI Response: "No problem. I'll notify apartment 412 so the resident or roommate can approve your visit."
+
+DELIVERY
+--------
+Question: "I'm here for a delivery."
+1. "Uber Eats but I don't know the apartment."
+   AI Response: "No problem. If you have the customer's name, I can help locate the apartment and notify them."
+2. "It's for someone named Sarah... that's all I got."
+   AI Response: "If you have the apartment number or full name, I can help notify the resident."
+3. "I think it's supposed to go to the mailroom."
+   AI Response: "Packages can be left in the designated delivery area near the lobby. I can notify the resident if needed."
+4. "The app just says leave at the door."
+   AI Response: "For security reasons, deliveries must be left in the designated delivery area unless the resident approves entry."
+5. "It's groceries but the customer isn't answering."
+   AI Response: "I can attempt to notify the resident for you. If they do not respond, the groceries can be left in the delivery area."
+
+CONTRACTOR / VENDOR
+-------------------
+Question: "I'm a contractor / maintenance vendor."
+1. "Yeah I'm here to fix something but I don't have the work order."
+   AI Response: "No problem. If you have the apartment number or management contact, I can help confirm your visit."
+2. "Management told me to come but I forgot the unit number."
+   AI Response: "I'll need the unit number or the management contact who scheduled the work so I can verify your access."
+3. "I'm subcontracted through another contractor."
+   AI Response: "Thanks. If you can provide the company name or unit number, I can verify your visit."
+4. "I'm here to check a leak somewhere on the 6th floor."
+   AI Response: "Thank you. I'll need the specific apartment number or a work order reference to confirm access."
+
+ENTRY / ACCESS
+--------------
+Question: "How do I get inside?"
+1. "The tenant said someone would let me in."
+   AI Response: "I can notify the resident and request approval to unlock the door."
+2. "The door usually opens automatically."
+   AI Response: "Access requires approval from the resident or building management."
+3. "I've been here before, it normally just works."
+   AI Response: "I'll just need to confirm the resident you're visiting before granting access."
+4. "I don't need access, I just need to leave this here."
+   AI Response: "You may leave deliveries in the designated delivery area near the lobby."
+5. "I think I'm supposed to use a code."
+   AI Response: "No code is required here. I can request access from the resident you're visiting."
+
+BUZZ IN
+-------
+Question: "Can you buzz me in?"
+1. "The resident isn't answering but they said it's fine."
+   AI Response: "I'll need confirmation from the resident before unlocking the door."
+2. "Can you just let me in real quick?"
+   AI Response: "For security, access requires approval from the resident."
+3. "I'm already approved from earlier."
+   AI Response: "I can resend the access request to the resident to confirm."
+4. "Someone let me in yesterday the same way."
+   AI Response: "I'll just need confirmation from the resident again for today's visit."
+5. "I'm locked out and I live here."
+   AI Response: "I can notify building management to assist with resident lockouts."
+
+DOOR NOT OPENING
+----------------
+Question: "The door isn't opening."
+AI Responses:
+- "Let me try unlocking the door again."
+- "Please try pulling the door open now."
+- "If the issue continues, I can notify building staff."
+- "It may be a mechanical issue. I'll alert maintenance."
+- "Please step back from the door while I reset access."
+
+ACCESS CODE
+-----------
+Question: "Do I need an access code?"
+AI Responses:
+- "No code is required. I coordinate access through the resident."
+- "If you're visiting a resident, I can notify them to approve entry."
+- "Some entrances require key fobs for residents only."
+- "Visitors typically enter once their visit is approved."
+- "If you're unsure who you're visiting, I can help locate the resident."
+
+LEASING
+-------
+Question: "Are there apartments available?"
+AI Responses:
+- "Yes, we currently have availability. Would you like pricing or floor plan details?"
+- "I can share current availability and connect you with leasing."
+- "Apartments become available throughout the year. I can check current listings."
+- "Would you like to schedule a tour?"
+- "I can send your information to our leasing team."
+
+RENT
+----
+Question: "How much is rent here?"
+AI Responses:
+- "Pricing varies by apartment size and availability."
+- "I can share current pricing ranges."
+- "Our leasing team can provide detailed pricing and specials."
+- "Would you like information on specific floor plans?"
+- "I can also help schedule a tour."
+
+TOURS
+-----
+Question: "Can I schedule a tour?"
+AI Responses:
+- "Yes, I can schedule a tour for you."
+- "Would you prefer a digital self-guided or agent-led tour?"
+- "I can check availability for today."
+- "I can send your information to the leasing team."
+- "What day and time works best for you?"
+
+PET POLICY
+----------
+Question: "Is this a pet-friendly building?"
+AI Responses:
+- "Yes, this is a pet-friendly community."
+- "Breed and weight restrictions may apply."
+- "Pet deposits or fees may be required."
+- "Our leasing team can provide full pet policy details."
+- "Would you like me to connect you with leasing?"
+
+DIRECTIONS / NAVIGATION
+-----------------------
+Example responses across navigation questions:
+- "The elevators are straight ahead past the lobby."
+- "Apartment 412 is on the fourth floor."
+- "Please take the elevator and turn right."
+- "If you need help navigating, I can guide you step by step."
+- "If you're lost, I can notify the resident."
+
+EMERGENCY
+---------
+Question: "What if there's an emergency?"
+AI Responses:
+- "If this is an emergency, please call 911 immediately."
+- "I can also notify building management."
+- "If there is a fire alarm, please exit the building safely."
+- "For water leaks or building issues, I can alert maintenance."
+- "Please move to a safe location while help is contacted."
+
+ESCALATION
+----------
+Question: "I need to speak to someone."
+AI Responses:
+- "I can notify the leasing office."
+- "I can alert building management."
+- "Someone from the office can come to the lobby."
+- "Would you like me to contact maintenance or leasing?"
+- "Please hold while I notify staff."
+
+FRUSTRATION HANDLING
+--------------------
+Question: "You're not understanding me."
+AI Responses:
+- "I'm sorry about that. Let's try again."
+- "You can rephrase your request and I'll do my best to help."
+- "If needed, I can connect you with building staff."
+- "Please let me know what you need help with."
+- "I can notify a staff member to assist you."
