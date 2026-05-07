@@ -32,3 +32,4 @@ Thumbs.db
 # Server runtime
 server.log
 server.pid
+conversations.db

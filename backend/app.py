@@ -3,18 +3,24 @@
 from __future__ import annotations
 
 import asyncio
+import csv
 import json
 import logging
+from datetime import datetime, timedelta
+from io import StringIO
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from sqlalchemy import desc, asc
+from sqlalchemy.exc import IntegrityError
 
 from backend import tavus_client, tool_stubs
 from backend.config import BACKEND_URL, TAVUS_PERSONA_ID
+from backend.models import init_db, get_session, Conversation, extract_visitor_name
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,6 +32,27 @@ app = FastAPI(title="Building Concierge API")
 
 # Maps conversation_id -> asyncio.Queue for SSE escalation push
 _escalation_queues: dict[str, asyncio.Queue] = {}
+
+# Database connection
+db_engine = None
+db_session = None
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database on application startup."""
+    global db_engine, db_session
+    db_engine = init_db("sqlite:///conversations.db")
+    db_session = get_session(db_engine)
+    logger.info("Database initialized: conversations.db")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Close database connection on application shutdown."""
+    if db_session:
+        db_session.close()
+    logger.info("Database connection closed")
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,6 +70,17 @@ FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 @app.get("/")
 async def serve_frontend():
     return FileResponse(FRONTEND_DIR / "index.html")
+
+
+@app.get("/conversations", response_class=HTMLResponse)
+async def conversations_page():
+    """Serve conversation history page."""
+    try:
+        with open(FRONTEND_DIR / "conversations.html", "r") as f:
+            return f.read()
+    except FileNotFoundError:
+        logger.error("conversations.html not found")
+        return HTMLResponse(content="<h1>Conversation History Page Not Found</h1>", status_code=404)
 
 
 app.mount("/frontend", StaticFiles(directory=str(FRONTEND_DIR)), name="frontend")
@@ -85,6 +123,91 @@ async def end_conversation(conversation_id: str):
     data = await tavus_client.end_conversation(conversation_id)
     logger.info("Conversation ended: %s", conversation_id)
     return data
+
+
+@app.get("/api/conversations")
+async def get_conversations(
+    days: str = "7",
+    sort: str = "newest",
+    format: str = "json"
+):
+    """Get conversation history with filtering and sorting."""
+    try:
+        # Build query
+        query = db_session.query(Conversation)
+
+        # Time filter
+        if days != "all":
+            cutoff = datetime.utcnow() - timedelta(days=int(days))
+            query = query.filter(Conversation.created_at >= cutoff)
+
+        # Sort
+        if sort == "oldest":
+            query = query.order_by(asc(Conversation.created_at))
+        elif sort == "longest":
+            query = query.order_by(desc(Conversation.duration_seconds), desc(Conversation.created_at))
+        else:  # newest (default)
+            query = query.order_by(desc(Conversation.created_at))
+
+        conversations = query.all()
+
+        # Return CSV format
+        if format == "csv":
+            output = StringIO()
+            writer = csv.writer(output)
+            writer.writerow(["ID", "Conversation ID", "Started At", "Ended At", "Duration (seconds)", "Visitor Name", "Recording URL", "Transcript"])
+
+            for conv in conversations:
+                # Flatten transcript for CSV
+                transcript_data = json.loads(conv.transcript) if conv.transcript else []
+                transcript_text = " ".join([f"{msg.get('speaker', 'unknown')}: {msg.get('text', '')}" for msg in transcript_data])
+
+                writer.writerow([
+                    conv.id,
+                    conv.conversation_id,
+                    conv.started_at.isoformat() if conv.started_at else "",
+                    conv.ended_at.isoformat() if conv.ended_at else "",
+                    conv.duration_seconds or 0,
+                    conv.visitor_name or "",
+                    conv.recording_url or "",
+                    transcript_text
+                ])
+
+            output.seek(0)
+            timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+            return StreamingResponse(
+                iter([output.getvalue()]),
+                media_type="text/csv",
+                headers={"Content-Disposition": f"attachment; filename=conversations-{timestamp}.csv"}
+            )
+
+        # Return JSON format (default)
+        result = {
+            "conversations": [
+                {
+                    "id": conv.id,
+                    "conversation_id": conv.conversation_id,
+                    "started_at": conv.started_at.isoformat() if conv.started_at else None,
+                    "ended_at": conv.ended_at.isoformat() if conv.ended_at else None,
+                    "duration_seconds": conv.duration_seconds,
+                    "visitor_name": conv.visitor_name,
+                    "recording_url": conv.recording_url,
+                    "transcript": json.loads(conv.transcript) if conv.transcript else []
+                }
+                for conv in conversations
+            ],
+            "total": len(conversations),
+            "filters": {"days": days, "sort": sort}
+        }
+
+        return result
+
+    except ValueError as e:
+        logger.error(f"Invalid query parameter: {e}")
+        return JSONResponse(status_code=400, content={"error": "Invalid query parameter"})
+    except Exception as e:
+        logger.error(f"Error fetching conversations: {e}")
+        return JSONResponse(status_code=500, content={"error": "Failed to fetch conversations"})
 
 
 @app.get("/api/conversations/{conversation_id}/events")
@@ -267,7 +390,56 @@ async def tavus_webhook(request: Request):
     # --- Other event types ---
     if event_type == "application.transcription_ready":
         transcript = payload.get("properties", {}).get("transcript", "")
-        logger.info("Transcript ready: %s", transcript[:200])
+        logger.info("Transcript ready: %s", transcript[:200] if isinstance(transcript, str) else "...")
+
+        # Store conversation in database
+        try:
+            conversation_id = payload["conversation_id"]
+            props = payload.get("properties", {})
+
+            # Parse timestamps
+            started_at = datetime.fromisoformat(props["started_at"].replace("Z", "+00:00"))
+            ended_at = datetime.fromisoformat(props["ended_at"].replace("Z", "+00:00"))
+            duration_seconds = int((ended_at - started_at).total_seconds())
+
+            # Process transcript
+            transcript_array = props.get("transcript", [])
+            transcript_json = json.dumps(transcript_array)
+
+            # Extract visitor name from transcript text
+            transcript_text = " ".join([msg.get("content", "") for msg in transcript_array])
+            visitor_name = extract_visitor_name(transcript_text)
+
+            # Get recording URL if available
+            recording_url = props.get("recording_url")
+
+            # Create and store conversation
+            conversation = Conversation(
+                conversation_id=conversation_id,
+                started_at=started_at,
+                ended_at=ended_at,
+                duration_seconds=duration_seconds,
+                transcript=transcript_json,
+                visitor_name=visitor_name,
+                recording_url=recording_url
+            )
+
+            db_session.add(conversation)
+            db_session.commit()
+            logger.info(f"Stored conversation: {conversation_id}")
+
+        except IntegrityError:
+            # Duplicate conversation_id - already stored
+            db_session.rollback()
+            logger.info(f"Conversation {conversation_id} already exists, skipping")
+        except KeyError as e:
+            # Missing required field in webhook payload
+            db_session.rollback()
+            logger.warning(f"Missing field in transcription webhook: {e}")
+        except Exception as e:
+            # Unexpected error
+            db_session.rollback()
+            logger.error(f"Failed to store conversation: {e}")
 
     elif event_type == "application.recording_ready":
         recording_url = payload.get("properties", {}).get("recording_url", "")

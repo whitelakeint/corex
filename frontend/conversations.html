@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Conversation History - The Meridian</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #1a3a5c;
+      --accent: #c9a96e;
+      --accent-light: #dfc48e;
+      --bg: #0d1b2a;
+      --bg-mid: #132d46;
+      --surface: rgba(255, 255, 255, 0.04);
+      --border: rgba(201, 169, 110, 0.25);
+      --text: #e8e4dc;
+      --text-dim: rgba(232, 228, 220, 0.5);
+      --radius: 12px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: "DM Sans", "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    header {
+      margin-bottom: 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    h1 {
+      font-family: "Playfair Display", serif;
+      font-size: 2rem;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: -0.02em;
+    }
+
+    .controls {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .filter-group {
+      display: flex;
+      gap: 0.5rem;
+      background: var(--surface);
+      padding: 0.25rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+    }
+
+    .filter-btn {
+      padding: 0.5rem 1rem;
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      border-radius: calc(var(--radius) - 2px);
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .filter-btn:hover {
+      background: rgba(201, 169, 110, 0.1);
+      color: var(--text);
+    }
+
+    .filter-btn.active {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    select {
+      padding: 0.625rem 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    select:hover {
+      border-color: var(--accent);
+    }
+
+    select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(201, 169, 110, 0.15);
+    }
+
+    .export-btn {
+      padding: 0.625rem 1.5rem;
+      background: var(--accent);
+      border: none;
+      border-radius: var(--radius);
+      color: var(--bg);
+      font-weight: 600;
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .export-btn:hover {
+      background: var(--accent-light);
+      transform: translateY(-1px);
+    }
+
+    .results-count {
+      color: var(--text-dim);
+      font-size: 0.875rem;
+      width: 100%;
+      text-align: right;
+      margin-top: -0.5rem;
+    }
+
+    .table-container {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead {
+      background: var(--bg-mid);
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      padding: 1rem;
+      text-align: left;
+      font-weight: 600;
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+    }
+
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.2s;
+    }
+
+    tbody tr:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    tbody tr:last-child {
+      border-bottom: none;
+    }
+
+    td {
+      padding: 1rem;
+      font-size: 0.9375rem;
+    }
+
+    .transcript-row {
+      display: none;
+      background: var(--bg-mid);
+    }
+
+    .transcript-row.expanded {
+      display: table-row;
+    }
+
+    .transcript-content {
+      padding: 1.5rem;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .message {
+      margin-bottom: 1rem;
+      line-height: 1.6;
+    }
+
+    .message:last-child {
+      margin-bottom: 0;
+    }
+
+    .message strong {
+      color: var(--accent);
+      display: inline-block;
+      min-width: 70px;
+    }
+
+    .action-btn {
+      padding: 0.375rem 0.875rem;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 0.8125rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-right: 0.5rem;
+    }
+
+    .action-btn:hover:not(:disabled) {
+      background: rgba(201, 169, 110, 0.1);
+      border-color: var(--accent);
+    }
+
+    .action-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .recording-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .recording-link:hover {
+      color: var(--accent-light);
+    }
+
+    .recording-link.disabled {
+      opacity: 0.3;
+      pointer-events: none;
+    }
+
+    .empty-state {
+      padding: 4rem 2rem;
+      text-align: center;
+      color: var(--text-dim);
+      display: none;
+    }
+
+    .empty-state.visible {
+      display: block;
+    }
+
+    .empty-state h2 {
+      font-size: 1.25rem;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+    }
+
+    .loading-spinner {
+      display: none;
+      text-align: center;
+      padding: 3rem;
+      color: var(--text-dim);
+    }
+
+    .loading-spinner.visible {
+      display: block;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--surface);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .error-toast {
+      position: fixed;
+      top: 2rem;
+      right: 2rem;
+      background: #dc2626;
+      color: white;
+      padding: 1rem 1.5rem;
+      border-radius: var(--radius);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      display: none;
+      z-index: 1000;
+      animation: slideIn 0.3s ease;
+    }
+
+    .error-toast.visible {
+      display: block;
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    @media (max-width: 768px) {
+      body {
+        padding: 1rem;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+      }
+
+      header {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .controls {
+        flex-direction: column;
+      }
+
+      .filter-group {
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      table {
+        font-size: 0.875rem;
+      }
+
+      th, td {
+        padding: 0.75rem 0.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Conversation History</h1>
+      <div class="controls">
+        <div class="filter-group">
+          <button class="filter-btn" data-days="1">1 Day</button>
+          <button class="filter-btn" data-days="2">2 Days</button>
+          <button class="filter-btn active" data-days="7">7 Days</button>
+          <button class="filter-btn" data-days="30">30 Days</button>
+          <button class="filter-btn" data-days="all">All</button>
+        </div>
+        <select id="sort-select">
+          <option value="newest">Newest First</option>
+          <option value="oldest">Oldest First</option>
+          <option value="longest">Longest Duration</option>
+        </select>
+        <button class="export-btn" id="export-btn">Export CSV</button>
+      </div>
+    </header>
+
+    <div class="results-count" id="results-count">Loading...</div>
+
+    <div class="loading-spinner visible" id="loading-spinner">
+      <div class="spinner"></div>
+      <p style="margin-top: 1rem;">Loading conversations...</p>
+    </div>
+
+    <div class="empty-state" id="empty-state">
+      <h2>No conversations found</h2>
+      <p>Try selecting a different time range or check back later.</p>
+    </div>
+
+    <div class="table-container" id="table-container" style="display: none;">
+      <table>
+        <thead>
+          <tr>
+            <th>Date & Time</th>
+            <th>Duration</th>
+            <th>Visitor</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="conversations-tbody">
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="error-toast" id="error-toast"></div>
+
+  <script>
+    let currentDays = '7';
+    let currentSort = 'newest';
+
+    // Show error toast
+    function showError(message) {
+      const toast = document.getElementById('error-toast');
+      toast.textContent = message;
+      toast.classList.add('visible');
+      setTimeout(() => toast.classList.remove('visible'), 5000);
+    }
+
+    // Format duration as "Xm Ys"
+    function formatDuration(seconds) {
+      if (!seconds) return '0s';
+      const minutes = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      if (minutes === 0) return `${secs}s`;
+      return `${minutes}m ${secs}s`;
+    }
+
+    // Format date
+    function formatDate(isoString) {
+      if (!isoString) return 'Unknown';
+      const date = new Date(isoString);
+      return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+    }
+
+    // Fetch conversations from API
+    async function fetchConversations(days, sort) {
+      const loadingSpinner = document.getElementById('loading-spinner');
+      const tableContainer = document.getElementById('table-container');
+      const emptyState = document.getElementById('empty-state');
+      const resultsCount = document.getElementById('results-count');
+
+      loadingSpinner.classList.add('visible');
+      tableContainer.style.display = 'none';
+      emptyState.classList.remove('visible');
+
+      try {
+        const response = await fetch(`/api/conversations?days=${days}&sort=${sort}`);
+        if (!response.ok) throw new Error('Failed to fetch conversations');
+
+        const data = await response.json();
+        const conversations = data.conversations || [];
+
+        loadingSpinner.classList.remove('visible');
+
+        if (conversations.length === 0) {
+          emptyState.classList.add('visible');
+          resultsCount.textContent = 'No conversations found';
+        } else {
+          tableContainer.style.display = 'block';
+          renderTable(conversations);
+          resultsCount.textContent = `Showing ${conversations.length} conversation${conversations.length !== 1 ? 's' : ''}`;
+        }
+      } catch (error) {
+        console.error('Error fetching conversations:', error);
+        loadingSpinner.classList.remove('visible');
+        emptyState.classList.add('visible');
+        showError('Failed to load conversations. Please try again.');
+        resultsCount.textContent = 'Error loading conversations';
+      }
+    }
+
+    // Render conversations table
+    function renderTable(conversations) {
+      const tbody = document.getElementById('conversations-tbody');
+
+      // Clear existing rows
+      while (tbody.firstChild) {
+        tbody.removeChild(tbody.firstChild);
+      }
+
+      conversations.forEach((conv, index) => {
+        // Main row
+        const row = document.createElement('tr');
+        row.dataset.transcript = JSON.stringify(conv.transcript || []);
+        row.dataset.index = index;
+
+        // Date cell
+        const dateCell = document.createElement('td');
+        dateCell.textContent = formatDate(conv.started_at);
+        row.appendChild(dateCell);
+
+        // Duration cell
+        const durationCell = document.createElement('td');
+        durationCell.textContent = formatDuration(conv.duration_seconds);
+        row.appendChild(durationCell);
+
+        // Visitor cell
+        const visitorCell = document.createElement('td');
+        visitorCell.textContent = conv.visitor_name || '(Unknown)';
+        if (!conv.visitor_name) {
+          visitorCell.style.color = 'var(--text-dim)';
+        }
+        row.appendChild(visitorCell);
+
+        // Actions cell
+        const actionsCell = document.createElement('td');
+
+        const viewBtn = document.createElement('button');
+        viewBtn.className = 'action-btn';
+        viewBtn.textContent = 'View Transcript';
+        viewBtn.addEventListener('click', () => toggleTranscript(row));
+        actionsCell.appendChild(viewBtn);
+
+        if (conv.recording_url) {
+          const recordingLink = document.createElement('a');
+          recordingLink.className = 'recording-link';
+          recordingLink.href = conv.recording_url;
+          recordingLink.target = '_blank';
+          recordingLink.textContent = 'Recording';
+          actionsCell.appendChild(recordingLink);
+        } else {
+          const recordingLink = document.createElement('span');
+          recordingLink.className = 'recording-link disabled';
+          recordingLink.textContent = 'Recording';
+          actionsCell.appendChild(recordingLink);
+        }
+
+        row.appendChild(actionsCell);
+        tbody.appendChild(row);
+
+        // Transcript row (hidden by default)
+        const transcriptRow = document.createElement('tr');
+        transcriptRow.className = 'transcript-row';
+        transcriptRow.dataset.parentIndex = index;
+
+        const transcriptCell = document.createElement('td');
+        transcriptCell.colSpan = 4;
+
+        const transcriptContent = document.createElement('div');
+        transcriptContent.className = 'transcript-content';
+        transcriptCell.appendChild(transcriptContent);
+
+        transcriptRow.appendChild(transcriptCell);
+        tbody.appendChild(transcriptRow);
+      });
+    }
+
+    // Toggle transcript visibility
+    function toggleTranscript(row) {
+      const index = row.dataset.index;
+      const transcriptRow = document.querySelector(`tr.transcript-row[data-parent-index="${index}"]`);
+      const transcriptContent = transcriptRow.querySelector('.transcript-content');
+      const viewBtn = row.querySelector('.action-btn');
+
+      if (transcriptRow.classList.contains('expanded')) {
+        transcriptRow.classList.remove('expanded');
+        viewBtn.textContent = 'View Transcript';
+      } else {
+        // Render transcript if not already rendered
+        if (transcriptContent.children.length === 0) {
+          const transcript = JSON.parse(row.dataset.transcript);
+          renderTranscript(transcriptContent, transcript);
+        }
+        transcriptRow.classList.add('expanded');
+        viewBtn.textContent = 'Collapse';
+      }
+    }
+
+    // Render formatted transcript
+    function renderTranscript(container, transcript) {
+      if (!transcript || transcript.length === 0) {
+        const emptyMsg = document.createElement('p');
+        emptyMsg.style.color = 'var(--text-dim)';
+        emptyMsg.textContent = 'No transcript available';
+        container.appendChild(emptyMsg);
+        return;
+      }
+
+      transcript.forEach(exchange => {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message';
+
+        const label = document.createElement('strong');
+        const speaker = exchange.speaker || exchange.role || 'unknown';
+        label.textContent = speaker === 'avatar' || speaker === 'assistant' ? 'Avatar: ' : 'Visitor: ';
+
+        const text = document.createElement('span');
+        text.textContent = exchange.text || exchange.content || '';
+
+        messageDiv.appendChild(label);
+        messageDiv.appendChild(text);
+        container.appendChild(messageDiv);
+      });
+    }
+
+    // Export CSV
+    function exportCSV() {
+      const url = `/api/conversations?days=${currentDays}&sort=${currentSort}&format=csv`;
+      window.location.href = url;
+    }
+
+    // Filter button click handler
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentDays = btn.dataset.days;
+        fetchConversations(currentDays, currentSort);
+      });
+    });
+
+    // Sort dropdown change handler
+    document.getElementById('sort-select').addEventListener('change', (e) => {
+      currentSort = e.target.value;
+      fetchConversations(currentDays, currentSort);
+    });
+
+    // Export button click handler
+    document.getElementById('export-btn').addEventListener('click', exportCSV);
+
+    // Initial load
+    fetchConversations(currentDays, currentSort);
+  </script>
+</body>
+</html>
