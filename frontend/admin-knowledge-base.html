@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Knowledge Base Management</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            max-width: 1200px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        /* Message box */
+        .message {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .message.show {
+            display: flex;
+        }
+
+        .message.error {
+            background: #fee;
+            color: #c33;
+            border: 1px solid #fcc;
+        }
+
+        .message.success {
+            background: #efe;
+            color: #3a3;
+            border: 1px solid #cfc;
+        }
+
+        .message-close {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: inherit;
+            padding: 0 5px;
+        }
+
+        /* Login form */
+        #login-view {
+            display: none;
+        }
+
+        #login-view.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 6px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        input[type="text"]:focus,
+        input[type="password"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        /* Editor view */
+        #editor-view {
+            display: none;
+        }
+
+        #editor-view.active {
+            display: block;
+        }
+
+        .header-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .editor-section {
+            margin-bottom: 30px;
+        }
+
+        .editor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .editor-label {
+            font-weight: 600;
+            color: #333;
+            font-size: 16px;
+        }
+
+        .char-count {
+            color: #666;
+            font-size: 13px;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-family: "Courier New", monospace;
+            font-size: 13px;
+            resize: vertical;
+            min-height: 250px;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #5568d3;
+        }
+
+        .btn-success {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: #38a169;
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #cbd5e0;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Knowledge Base Management</h1>
+        <p class="subtitle">Edit building information and concierge Q&A content</p>
+
+        <!-- Message box -->
+        <div id="message" class="message">
+            <span id="message-text"></span>
+            <button class="message-close" onclick="hideMessage()">&times;</button>
+        </div>
+
+        <!-- Login View -->
+        <div id="login-view">
+            <form id="login-form" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required autocomplete="current-password">
+                </div>
+                <button type="submit" class="btn btn-primary" id="login-btn">Login</button>
+            </form>
+        </div>
+
+        <!-- Editor View -->
+        <div id="editor-view">
+            <div class="header-actions">
+                <div class="btn-group">
+                    <button class="btn btn-success" onclick="handleSave()" id="save-btn">Save Files</button>
+                    <button class="btn btn-primary" onclick="handleSync()" id="sync-btn">Sync to Tavus</button>
+                </div>
+                <button class="btn btn-secondary" onclick="handleLogout()">Logout</button>
+            </div>
+
+            <div class="editor-section">
+                <div class="editor-header">
+                    <span class="editor-label">Building Information</span>
+                    <span class="char-count" id="building-char-count">0 characters</span>
+                </div>
+                <textarea id="building-info" oninput="updateCharCount('building')"></textarea>
+            </div>
+
+            <div class="editor-section">
+                <div class="editor-header">
+                    <span class="editor-label">Concierge Q&A</span>
+                    <span class="char-count" id="qa-char-count">0 characters</span>
+                </div>
+                <textarea id="concierge-qa" oninput="updateCharCount('qa')"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let isAuthenticated = false;
+        let messageTimeout = null;
+
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', init);
+
+        async function init() {
+            // Try to fetch content (checks session validity)
+            await checkSession();
+        }
+
+        async function checkSession() {
+            try {
+                const response = await fetch('/admin/knowledge-base/content');
+                if (response.ok) {
+                    const data = await response.json();
+                    loadEditor(data);
+                } else {
+                    showLogin();
+                }
+            } catch (error) {
+                console.error('Session check failed:', error);
+                showLogin();
+            }
+        }
+
+        function showLogin() {
+            isAuthenticated = false;
+            document.getElementById('login-view').classList.add('active');
+            document.getElementById('editor-view').classList.remove('active');
+        }
+
+        function showEditor() {
+            isAuthenticated = true;
+            document.getElementById('login-view').classList.remove('active');
+            document.getElementById('editor-view').classList.add('active');
+        }
+
+        function loadEditor(data) {
+            const buildingTextarea = document.getElementById('building-info');
+            const qaTextarea = document.getElementById('concierge-qa');
+
+            buildingTextarea.value = data.building_info;
+            qaTextarea.value = data.concierge_qa;
+
+            updateCharCount('building');
+            updateCharCount('qa');
+
+            showEditor();
+        }
+
+        function updateCharCount(type) {
+            if (type === 'building') {
+                const textarea = document.getElementById('building-info');
+                const count = document.getElementById('building-char-count');
+                count.textContent = `${textarea.value.length} characters`;
+            } else if (type === 'qa') {
+                const textarea = document.getElementById('concierge-qa');
+                const count = document.getElementById('qa-char-count');
+                count.textContent = `${textarea.value.length} characters`;
+            }
+        }
+
+        function showMessage(text, type = 'success') {
+            const messageBox = document.getElementById('message');
+            const messageText = document.getElementById('message-text');
+
+            messageText.textContent = text;
+            messageBox.className = `message show ${type}`;
+
+            // Auto-dismiss after 5 seconds
+            clearTimeout(messageTimeout);
+            messageTimeout = setTimeout(hideMessage, 5000);
+        }
+
+        function hideMessage() {
+            const messageBox = document.getElementById('message');
+            messageBox.classList.remove('show');
+            clearTimeout(messageTimeout);
+        }
+
+        function setButtonLoading(buttonId, loading) {
+            const button = document.getElementById(buttonId);
+            if (loading) {
+                button.disabled = true;
+                const originalText = button.textContent;
+                button.dataset.originalText = originalText;
+                // Create loading spinner element
+                const spinner = document.createElement('span');
+                spinner.className = 'loading';
+                button.textContent = '';
+                button.appendChild(spinner);
+                button.appendChild(document.createTextNode(originalText));
+            } else {
+                button.disabled = false;
+                button.textContent = button.dataset.originalText || button.textContent;
+            }
+        }
+
+        // Authentication handlers
+        async function handleLogin(event) {
+            event.preventDefault();
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            setButtonLoading('login-btn', true);
+            hideMessage();
+
+            try {
+                const response = await fetch('/admin/auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password }),
+                });
+
+                if (response.ok) {
+                    // Fetch content and show editor
+                    await checkSession();
+                    showMessage('Login successful', 'success');
+                } else {
+                    const error = await response.json();
+                    showMessage(error.error || 'Login failed', 'error');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showMessage('Login failed: Network error', 'error');
+            } finally {
+                setButtonLoading('login-btn', false);
+            }
+        }
+
+        async function handleLogout() {
+            try {
+                await fetch('/admin/logout', { method: 'POST' });
+                showLogin();
+                showMessage('Logged out successfully', 'success');
+
+                // Clear form
+                document.getElementById('username').value = '';
+                document.getElementById('password').value = '';
+            } catch (error) {
+                console.error('Logout error:', error);
+                showMessage('Logout failed', 'error');
+            }
+        }
+
+        // Save handler
+        async function handleSave() {
+            const buildingInfo = document.getElementById('building-info').value;
+            const conciergeQa = document.getElementById('concierge-qa').value;
+
+            if (!buildingInfo.trim()) {
+                showMessage('Building information cannot be empty', 'error');
+                return;
+            }
+
+            if (!conciergeQa.trim()) {
+                showMessage('Concierge Q&A cannot be empty', 'error');
+                return;
+            }
+
+            setButtonLoading('save-btn', true);
+            hideMessage();
+
+            try {
+                const response = await fetch('/admin/knowledge-base/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        building_info: buildingInfo,
+                        concierge_qa: conciergeQa,
+                    }),
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    showMessage(data.message || 'Files saved successfully', 'success');
+                } else if (response.status === 401) {
+                    showMessage('Session expired, please login again', 'error');
+                    setTimeout(showLogin, 2000);
+                } else {
+                    const error = await response.json();
+                    showMessage(error.error || 'Save failed', 'error');
+                }
+            } catch (error) {
+                console.error('Save error:', error);
+                showMessage('Save failed: Network error', 'error');
+            } finally {
+                setButtonLoading('save-btn', false);
+            }
+        }
+
+        // Sync handler
+        async function handleSync() {
+            setButtonLoading('sync-btn', true);
+            hideMessage();
+
+            try {
+                const response = await fetch('/admin/knowledge-base/sync', {
+                    method: 'POST',
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const charInfo = data.chars ? ` (${data.chars} characters)` : '';
+                    showMessage(data.message + charInfo || 'Tavus persona updated', 'success');
+                } else if (response.status === 401) {
+                    showMessage('Session expired, please login again', 'error');
+                    setTimeout(showLogin, 2000);
+                } else {
+                    const error = await response.json();
+                    showMessage(error.error || 'Sync failed', 'error');
+                }
+            } catch (error) {
+                console.error('Sync error:', error);
+                showMessage('Sync failed: Network error', 'error');
+            } finally {
+                setButtonLoading('sync-btn', false);
+            }
+        }
+    </script>
+</body>
+</html>
