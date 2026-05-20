@@ -513,6 +513,67 @@ async def save_kb_content(body: KnowledgeBaseSaveRequest, request: Request):
         )
 
 
+@app.post("/admin/knowledge-base/sync")
+async def sync_kb_to_tavus(request: Request):
+    """Sync knowledge base content to Tavus persona context (protected)."""
+    session_id = request.cookies.get("admin_session")
+    if not validate_session(session_id):
+        return JSONResponse(
+            status_code=401,
+            content={"error": "Authentication required"},
+        )
+
+    if not TAVUS_PERSONA_ID or TAVUS_PERSONA_ID == "your_persona_id_here":
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Invalid TAVUS_PERSONA_ID configuration"},
+        )
+
+    try:
+        kb_dir = FRONTEND_DIR.parent / "knowledge-base"
+        building_info_path = kb_dir / "building_info.txt"
+        concierge_qa_path = kb_dir / "concierge_qa.txt"
+
+        building_info = building_info_path.read_text()
+        concierge_qa = concierge_qa_path.read_text()
+
+        # Combine content (same logic as update_persona_context.py)
+        combined = (
+            building_info.strip()
+            + "\n\n"
+            + "=" * 40
+            + "\n"
+            + concierge_qa.strip()
+        )
+
+        operations = [
+            {"op": "replace", "path": "/context", "value": combined},
+        ]
+
+        result = await tavus_client.patch_persona(TAVUS_PERSONA_ID, operations)
+
+        username = _admin_sessions.get(session_id, {}).get("username", "unknown")
+        logger.info(f"Tavus persona synced by user: {username} ({len(combined)} chars)")
+
+        return {
+            "status": "ok",
+            "message": "Tavus persona updated",
+            "chars": len(combined),
+        }
+    except FileNotFoundError as e:
+        logger.error(f"Knowledge base file not found during sync: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to read knowledge base files"},
+        )
+    except Exception as e:
+        logger.error(f"Error syncing to Tavus: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Tavus API error: {str(e)}"},
+        )
+
+
 # ---------------------------------------------------------------------------
 # Tavus webhook receiver
 # ---------------------------------------------------------------------------
