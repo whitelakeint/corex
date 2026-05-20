@@ -574,6 +574,22 @@ async def sync_kb_to_tavus(request: Request):
         )
 
 
+@app.post("/admin/logout")
+async def admin_logout(request: Request, response: Response):
+    """Destroy admin session and clear cookie (protected)."""
+    session_id = request.cookies.get("admin_session")
+    if not validate_session(session_id):
+        return JSONResponse(
+            status_code=401,
+            content={"error": "Authentication required"},
+        )
+
+    destroy_session(session_id)
+    response.delete_cookie(key="admin_session", path="/admin")
+
+    return {"status": "ok"}
+
+
 # ---------------------------------------------------------------------------
 # Tavus webhook receiver
 # ---------------------------------------------------------------------------
