@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import csv
+import hmac
 import json
 import logging
 import secrets
@@ -88,6 +89,19 @@ db_session = None
 async def startup_event():
     """Initialize database on application startup."""
     global db_engine, db_session
+
+    # Security check: ensure admin credentials are configured
+    if not ADMIN_USERNAME or not ADMIN_PASSWORD:
+        raise RuntimeError(
+            "CRITICAL: ADMIN_USERNAME and ADMIN_PASSWORD must be set in .env file. "
+            "These credentials cannot use default values for security reasons."
+        )
+    if ADMIN_PASSWORD in ("admin", "meridian", "password"):
+        raise RuntimeError(
+            "CRITICAL: ADMIN_PASSWORD must not use a default or guessable value. "
+            "Please set a strong password in .env file."
+        )
+
     db_engine = init_db("sqlite:///conversations.db")
     db_session = get_session(db_engine)
     logger.info("Database initialized: conversations.db")
@@ -378,10 +392,15 @@ async def escalate_to_human_endpoint(body: EscalateToHumanRequest):
 # ---------------------------------------------------------------------------
 # Admin authentication
 # ---------------------------------------------------------------------------
+# TODO: Add rate-limiting for production (e.g., 5 attempts per IP per minute)
 @app.post("/admin/auth")
 async def admin_auth(body: AdminAuthRequest, response: Response):
     """Authenticate admin user and create session."""
-    if body.username != ADMIN_USERNAME or body.password != ADMIN_PASSWORD:
+    # Use constant-time comparison to prevent timing attacks
+    username_match = hmac.compare_digest(body.username, ADMIN_USERNAME)
+    password_match = hmac.compare_digest(body.password, ADMIN_PASSWORD)
+
+    if not (username_match and password_match):
         logger.warning(f"Failed login attempt for user: {body.username}")
         return JSONResponse(
             status_code=401,
@@ -392,7 +411,9 @@ async def admin_auth(body: AdminAuthRequest, response: Response):
     response.set_cookie(
         key="admin_session",
         value=session_id,
+        secure=True,
         httponly=True,
+        samesite="strict",
         max_age=SESSION_DURATION_SECONDS,
         path="/admin",
     )
