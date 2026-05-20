@@ -7,7 +7,7 @@ import csv
 import json
 import logging
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from io import StringIO
 from pathlib import Path
 
@@ -20,7 +20,7 @@ from sqlalchemy import desc, asc
 from sqlalchemy.exc import IntegrityError
 
 from backend import tavus_client, tool_stubs
-from backend.config import BACKEND_URL, TAVUS_PERSONA_ID
+from backend.config import BACKEND_URL, TAVUS_PERSONA_ID, ADMIN_USERNAME, ADMIN_PASSWORD
 from backend.models import init_db, get_session, Conversation, extract_visitor_name
 
 logging.basicConfig(
@@ -32,17 +32,25 @@ logger = logging.getLogger("concierge.app")
 # Admin session management
 _admin_sessions: dict[str, dict] = {}
 
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "meridian"
 SESSION_DURATION_SECONDS = 7200  # 2 hours
+SESSION_EVICTION_THRESHOLD = 100  # Max sessions before cleanup
 
 
 def create_session(username: str) -> str:
     """Create a new admin session and return session ID."""
+    # Evict expired sessions if threshold exceeded
+    if len(_admin_sessions) > SESSION_EVICTION_THRESHOLD:
+        now = datetime.now(timezone.utc)
+        expired = [sid for sid, data in _admin_sessions.items() if now > data["expires_at"]]
+        for sid in expired:
+            del _admin_sessions[sid]
+        if expired:
+            logger.info(f"Evicted {len(expired)} expired sessions")
+
     session_id = secrets.token_urlsafe(32)
     _admin_sessions[session_id] = {
         "username": username,
-        "expires_at": datetime.utcnow() + timedelta(seconds=SESSION_DURATION_SECONDS),
+        "expires_at": datetime.now(timezone.utc) + timedelta(seconds=SESSION_DURATION_SECONDS),
     }
     logger.info(f"Session created for user: {username}")
     return session_id
@@ -53,7 +61,7 @@ def validate_session(session_id: str) -> bool:
     if not session_id or session_id not in _admin_sessions:
         return False
     session = _admin_sessions[session_id]
-    if datetime.utcnow() > session["expires_at"]:
+    if datetime.now(timezone.utc) > session["expires_at"]:
         del _admin_sessions[session_id]
         logger.info(f"Session expired and removed: {session_id[:8]}...")
         return False
@@ -176,7 +184,7 @@ async def get_conversations(
 
         # Time filter
         if days != "all":
-            cutoff = datetime.utcnow() - timedelta(days=int(days))
+            cutoff = datetime.now(timezone.utc) - timedelta(days=int(days))
             query = query.filter(Conversation.created_at >= cutoff)
 
         # Sort
@@ -212,7 +220,7 @@ async def get_conversations(
                 ])
 
             output.seek(0)
-            timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
             return StreamingResponse(
                 iter([output.getvalue()]),
                 media_type="text/csv",
@@ -443,7 +451,7 @@ async def tavus_webhook(request: Request):
                 duration_seconds = int((ended_at - started_at).total_seconds())
             else:
                 # Fallback: use webhook timestamp or current time
-                ended_at = datetime.utcnow()
+                ended_at = datetime.now(timezone.utc)
                 started_at = ended_at - timedelta(seconds=300)  # Assume 5 min conversation
                 duration_seconds = 300
                 logger.warning(f"Timestamps missing, using fallback for conversation {conversation_id}")
