@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from io import StringIO
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -318,6 +318,11 @@ class EscalateToHumanRequest(BaseModel):
     user_question: str = ""
 
 
+class AdminAuthRequest(BaseModel):
+    username: str
+    password: str
+
+
 @app.post("/api/notify-resident")
 async def notify_resident(body: NotifyResidentRequest):
     return tool_stubs.notify_resident(
@@ -368,6 +373,32 @@ async def escalate_to_human_endpoint(body: EscalateToHumanRequest):
         reason=body.reason,
         user_question=body.user_question,
     )
+
+
+# ---------------------------------------------------------------------------
+# Admin authentication
+# ---------------------------------------------------------------------------
+@app.post("/admin/auth")
+async def admin_auth(body: AdminAuthRequest, response: Response):
+    """Authenticate admin user and create session."""
+    if body.username != ADMIN_USERNAME or body.password != ADMIN_PASSWORD:
+        logger.warning(f"Failed login attempt for user: {body.username}")
+        return JSONResponse(
+            status_code=401,
+            content={"error": "Invalid username or password"},
+        )
+
+    session_id = create_session(body.username)
+    response.set_cookie(
+        key="admin_session",
+        value=session_id,
+        httponly=True,
+        max_age=SESSION_DURATION_SECONDS,
+        path="/admin",
+    )
+
+    logger.info(f"Successful login for user: {body.username}")
+    return {"status": "ok"}
 
 
 # ---------------------------------------------------------------------------
