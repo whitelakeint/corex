@@ -422,6 +422,42 @@ async def admin_auth(body: AdminAuthRequest, response: Response):
     return {"status": "ok"}
 
 
+@app.get("/admin/knowledge-base/content")
+async def get_kb_content(request: Request):
+    """Get current knowledge base file contents (protected)."""
+    session_id = request.cookies.get("admin_session")
+    if not validate_session(session_id):
+        return JSONResponse(
+            status_code=401,
+            content={"error": "Authentication required"},
+        )
+
+    try:
+        building_info_path = FRONTEND_DIR.parent / "knowledge-base" / "building_info.txt"
+        concierge_qa_path = FRONTEND_DIR.parent / "knowledge-base" / "concierge_qa.txt"
+
+        building_info = building_info_path.read_text()
+        concierge_qa = concierge_qa_path.read_text()
+
+        logger.info(f"Knowledge base content retrieved by session: {session_id[:8]}...")
+        return {
+            "building_info": building_info,
+            "concierge_qa": concierge_qa,
+        }
+    except FileNotFoundError as e:
+        logger.error(f"Knowledge base file not found: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to read knowledge base files"},
+        )
+    except Exception as e:
+        logger.error(f"Error reading knowledge base: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to read knowledge base files: {str(e)}"},
+        )
+
+
 # ---------------------------------------------------------------------------
 # Tavus webhook receiver
 # ---------------------------------------------------------------------------
