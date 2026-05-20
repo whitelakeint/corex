@@ -143,6 +143,17 @@ async def conversations_page():
         return HTMLResponse(content="<h1>Conversation History Page Not Found</h1>", status_code=404)
 
 
+@app.get("/admin/knowledge-base", response_class=HTMLResponse)
+async def admin_kb_page():
+    """Serve admin knowledge base management page."""
+    try:
+        with open(FRONTEND_DIR / "admin-knowledge-base.html", "r") as f:
+            return f.read()
+    except FileNotFoundError:
+        logger.error("admin-knowledge-base.html not found")
+        return HTMLResponse(content="<h1>Admin Page Not Found</h1>", status_code=404)
+
+
 app.mount("/frontend", StaticFiles(directory=str(FRONTEND_DIR)), name="frontend")
 
 
