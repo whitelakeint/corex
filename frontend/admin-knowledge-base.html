@@ -493,7 +493,7 @@
                 if (response.ok) {
                     const data = await response.json();
                     const charInfo = data.chars ? ` (${data.chars} characters)` : '';
-                    showMessage(data.message + charInfo || 'Tavus persona updated', 'success');
+                    showMessage((data.message || 'Tavus persona updated') + charInfo, 'success');
                 } else if (response.status === 401) {
                     showMessage('Session expired, please login again', 'error');
                     setTimeout(showLogin, 2000);
