@@ -337,6 +337,11 @@ class AdminAuthRequest(BaseModel):
     password: str
 
 
+class KnowledgeBaseSaveRequest(BaseModel):
+    building_info: str
+    concierge_qa: str
+
+
 @app.post("/api/notify-resident")
 async def notify_resident(body: NotifyResidentRequest):
     return tool_stubs.notify_resident(
@@ -455,6 +460,56 @@ async def get_kb_content(request: Request):
         return JSONResponse(
             status_code=500,
             content={"error": f"Failed to read knowledge base files: {str(e)}"},
+        )
+
+
+@app.post("/admin/knowledge-base/save")
+async def save_kb_content(body: KnowledgeBaseSaveRequest, request: Request):
+    """Save knowledge base file contents (protected)."""
+    session_id = request.cookies.get("admin_session")
+    if not validate_session(session_id):
+        return JSONResponse(
+            status_code=401,
+            content={"error": "Authentication required"},
+        )
+
+    # Validate non-empty
+    if not body.building_info or not body.building_info.strip():
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Content cannot be empty: building_info"},
+        )
+    if not body.concierge_qa or not body.concierge_qa.strip():
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Content cannot be empty: concierge_qa"},
+        )
+
+    try:
+        kb_dir = FRONTEND_DIR.parent / "knowledge-base"
+        building_info_path = kb_dir / "building_info.txt"
+        concierge_qa_path = kb_dir / "concierge_qa.txt"
+
+        building_info_path.write_text(body.building_info)
+        concierge_qa_path.write_text(body.concierge_qa)
+
+        username = _admin_sessions.get(session_id, {}).get("username", "unknown")
+        logger.info(f"Knowledge base files saved by user: {username}")
+        return {
+            "status": "ok",
+            "message": "Files saved successfully",
+        }
+    except PermissionError:
+        logger.error("Permission denied writing to knowledge-base/")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Permission denied writing to knowledge-base/"},
+        )
+    except Exception as e:
+        logger.error(f"Error saving knowledge base: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to save files: {str(e)}"},
         )
 
 
