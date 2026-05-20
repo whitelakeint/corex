@@ -6,6 +6,7 @@ import asyncio
 import csv
 import json
 import logging
+import secrets
 from datetime import datetime, timedelta
 from io import StringIO
 from pathlib import Path
@@ -27,6 +28,43 @@ logging.basicConfig(
     format="%(asctime)s  %(name)-24s  %(levelname)-5s  %(message)s",
 )
 logger = logging.getLogger("concierge.app")
+
+# Admin session management
+_admin_sessions: dict[str, dict] = {}
+
+ADMIN_USERNAME = "admin"
+ADMIN_PASSWORD = "meridian"
+SESSION_DURATION_SECONDS = 7200  # 2 hours
+
+
+def create_session(username: str) -> str:
+    """Create a new admin session and return session ID."""
+    session_id = secrets.token_urlsafe(32)
+    _admin_sessions[session_id] = {
+        "username": username,
+        "expires_at": datetime.utcnow() + timedelta(seconds=SESSION_DURATION_SECONDS),
+    }
+    logger.info(f"Session created for user: {username}")
+    return session_id
+
+
+def validate_session(session_id: str) -> bool:
+    """Check if session ID is valid and not expired."""
+    if not session_id or session_id not in _admin_sessions:
+        return False
+    session = _admin_sessions[session_id]
+    if datetime.utcnow() > session["expires_at"]:
+        del _admin_sessions[session_id]
+        logger.info(f"Session expired and removed: {session_id[:8]}...")
+        return False
+    return True
+
+
+def destroy_session(session_id: str) -> None:
+    """Remove session from store."""
+    _admin_sessions.pop(session_id, None)
+    logger.info(f"Session destroyed: {session_id[:8]}...")
+
 
 app = FastAPI(title="Building Concierge API")
 
@@ -391,23 +429,39 @@ async def tavus_webhook(request: Request):
     if event_type == "application.transcription_ready":
         transcript = payload.get("properties", {}).get("transcript", "")
         logger.info("Transcript ready: %s", transcript[:200] if isinstance(transcript, str) else "...")
+        logger.info(f"Full transcription webhook payload: {json.dumps(payload, indent=2)}")
 
         # Store conversation in database
         try:
             conversation_id = payload["conversation_id"]
             props = payload.get("properties", {})
 
-            # Parse timestamps
-            started_at = datetime.fromisoformat(props["started_at"].replace("Z", "+00:00"))
-            ended_at = datetime.fromisoformat(props["ended_at"].replace("Z", "+00:00"))
-            duration_seconds = int((ended_at - started_at).total_seconds())
+            # Parse timestamps - use current time if not provided
+            if "started_at" in props and "ended_at" in props:
+                started_at = datetime.fromisoformat(props["started_at"].replace("Z", "+00:00"))
+                ended_at = datetime.fromisoformat(props["ended_at"].replace("Z", "+00:00"))
+                duration_seconds = int((ended_at - started_at).total_seconds())
+            else:
+                # Fallback: use webhook timestamp or current time
+                ended_at = datetime.utcnow()
+                started_at = ended_at - timedelta(seconds=300)  # Assume 5 min conversation
+                duration_seconds = 300
+                logger.warning(f"Timestamps missing, using fallback for conversation {conversation_id}")
 
-            # Process transcript
+            # Process transcript - filter out system messages
             transcript_array = props.get("transcript", [])
-            transcript_json = json.dumps(transcript_array)
+
+            # Filter: keep only assistant (avatar) and user (visitor) messages
+            # Exclude: system messages, tool messages
+            filtered_transcript = [
+                msg for msg in transcript_array
+                if msg.get("role") in ("assistant", "user")
+            ]
+
+            transcript_json = json.dumps(filtered_transcript)
 
             # Extract visitor name from transcript text
-            transcript_text = " ".join([msg.get("content", "") for msg in transcript_array])
+            transcript_text = " ".join([msg.get("content", "") for msg in filtered_transcript])
             visitor_name = extract_visitor_name(transcript_text)
 
             # Get recording URL if available
