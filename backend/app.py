@@ -439,15 +439,8 @@ async def admin_auth(body: AdminAuthRequest, response: Response):
 
 
 @app.get("/admin/knowledge-base/content")
-async def get_kb_content(request: Request):
-    """Get current knowledge base file contents (protected)."""
-    session_id = request.cookies.get("admin_session")
-    if not validate_session(session_id):
-        return JSONResponse(
-            status_code=401,
-            content={"error": "Authentication required"},
-        )
-
+async def get_kb_content():
+    """Get current knowledge base file contents."""
     try:
         building_info_path = FRONTEND_DIR.parent / "knowledge-base" / "building_info.txt"
         concierge_qa_path = FRONTEND_DIR.parent / "knowledge-base" / "concierge_qa.txt"
@@ -455,7 +448,7 @@ async def get_kb_content(request: Request):
         building_info = building_info_path.read_text()
         concierge_qa = concierge_qa_path.read_text()
 
-        logger.info(f"Knowledge base content retrieved by session: {session_id[:8]}...")
+        logger.info("Knowledge base content retrieved")
         return {
             "building_info": building_info,
             "concierge_qa": concierge_qa,
@@ -475,15 +468,8 @@ async def get_kb_content(request: Request):
 
 
 @app.post("/admin/knowledge-base/save")
-async def save_kb_content(body: KnowledgeBaseSaveRequest, request: Request):
-    """Save knowledge base file contents (protected)."""
-    session_id = request.cookies.get("admin_session")
-    if not validate_session(session_id):
-        return JSONResponse(
-            status_code=401,
-            content={"error": "Authentication required"},
-        )
-
+async def save_kb_content(body: KnowledgeBaseSaveRequest):
+    """Save knowledge base file contents."""
     # Validate non-empty
     if not body.building_info or not body.building_info.strip():
         return JSONResponse(
@@ -504,8 +490,7 @@ async def save_kb_content(body: KnowledgeBaseSaveRequest, request: Request):
         building_info_path.write_text(body.building_info)
         concierge_qa_path.write_text(body.concierge_qa)
 
-        username = _admin_sessions.get(session_id, {}).get("username", "unknown")
-        logger.info(f"Knowledge base files saved by user: {username}")
+        logger.info("Knowledge base files saved")
         return {
             "status": "ok",
             "message": "Files saved successfully",
@@ -525,15 +510,8 @@ async def save_kb_content(body: KnowledgeBaseSaveRequest, request: Request):
 
 
 @app.post("/admin/knowledge-base/sync")
-async def sync_kb_to_tavus(request: Request):
-    """Sync knowledge base content to Tavus persona context (protected)."""
-    session_id = request.cookies.get("admin_session")
-    if not validate_session(session_id):
-        return JSONResponse(
-            status_code=401,
-            content={"error": "Authentication required"},
-        )
-
+async def sync_kb_to_tavus():
+    """Sync knowledge base content to Tavus persona context."""
     if not TAVUS_PERSONA_ID or TAVUS_PERSONA_ID == "your_persona_id_here":
         return JSONResponse(
             status_code=500,
@@ -563,8 +541,7 @@ async def sync_kb_to_tavus(request: Request):
 
         result = await tavus_client.patch_persona(TAVUS_PERSONA_ID, operations)
 
-        username = _admin_sessions.get(session_id, {}).get("username", "unknown")
-        logger.info(f"Tavus persona synced by user: {username} ({len(combined)} chars)")
+        logger.info(f"Tavus persona synced ({len(combined)} chars)")
 
         return {
             "status": "ok",

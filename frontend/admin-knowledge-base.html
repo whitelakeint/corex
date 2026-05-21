@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - Knowledge Base Management</title>
+    <title>Update Knowledge Base</title>
     <style>
         * {
             margin: 0;
@@ -42,7 +42,6 @@
             font-size: 14px;
         }
 
-        /* Message box */
         .message {
             padding: 12px 16px;
             border-radius: 6px;
@@ -75,50 +74,6 @@
             cursor: pointer;
             color: inherit;
             padding: 0 5px;
-        }
-
-        /* Login form */
-        #login-view {
-            display: none;
-        }
-
-        #login-view.active {
-            display: block;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 6px;
-            color: #333;
-            font-weight: 500;
-        }
-
-        input[type="text"],
-        input[type="password"] {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 14px;
-        }
-
-        input[type="text"]:focus,
-        input[type="password"]:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        /* Editor view */
-        #editor-view {
-            display: none;
-        }
-
-        #editor-view.active {
-            display: block;
         }
 
         .header-actions {
@@ -166,7 +121,6 @@
             border-color: #667eea;
         }
 
-        /* Buttons */
         .btn {
             padding: 12px 24px;
             border: none;
@@ -236,106 +190,61 @@
         <h1>Knowledge Base Management</h1>
         <p class="subtitle">Edit building information and concierge Q&A content</p>
 
-        <!-- Message box -->
         <div id="message" class="message">
             <span id="message-text"></span>
             <button class="message-close" onclick="hideMessage()">&times;</button>
         </div>
 
-        <!-- Login View -->
-        <div id="login-view">
-            <form id="login-form" onsubmit="handleLogin(event)">
-                <div class="form-group">
-                    <label for="username">Username</label>
-                    <input type="text" id="username" name="username" required autocomplete="username">
-                </div>
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" name="password" required autocomplete="current-password">
-                </div>
-                <button type="submit" class="btn btn-primary" id="login-btn">Login</button>
-            </form>
+        <div class="header-actions">
+            <div class="btn-group">
+                <button class="btn btn-success" onclick="handleSave()" id="save-btn">Save Files</button>
+                <button class="btn btn-primary" onclick="handleSync()" id="sync-btn">Sync to Tavus</button>
+            </div>
+            <button class="btn btn-secondary" onclick="window.location.href='/'">Back to Portal</button>
         </div>
 
-        <!-- Editor View -->
-        <div id="editor-view">
-            <div class="header-actions">
-                <div class="btn-group">
-                    <button class="btn btn-success" onclick="handleSave()" id="save-btn">Save Files</button>
-                    <button class="btn btn-primary" onclick="handleSync()" id="sync-btn">Sync to Tavus</button>
-                </div>
-                <button class="btn btn-secondary" onclick="handleLogout()">Logout</button>
+        <div class="editor-section">
+            <div class="editor-header">
+                <span class="editor-label">Building Information</span>
+                <span class="char-count" id="building-char-count">0 characters</span>
             </div>
+            <textarea id="building-info" oninput="updateCharCount('building')"></textarea>
+        </div>
 
-            <div class="editor-section">
-                <div class="editor-header">
-                    <span class="editor-label">Building Information</span>
-                    <span class="char-count" id="building-char-count">0 characters</span>
-                </div>
-                <textarea id="building-info" oninput="updateCharCount('building')"></textarea>
+        <div class="editor-section">
+            <div class="editor-header">
+                <span class="editor-label">Concierge Q&A</span>
+                <span class="char-count" id="qa-char-count">0 characters</span>
             </div>
-
-            <div class="editor-section">
-                <div class="editor-header">
-                    <span class="editor-label">Concierge Q&A</span>
-                    <span class="char-count" id="qa-char-count">0 characters</span>
-                </div>
-                <textarea id="concierge-qa" oninput="updateCharCount('qa')"></textarea>
-            </div>
+            <textarea id="concierge-qa" oninput="updateCharCount('qa')"></textarea>
         </div>
     </div>
 
     <script>
-        // State
-        let isAuthenticated = false;
         let messageTimeout = null;
 
-        // Initialize on page load
         window.addEventListener('DOMContentLoaded', init);
 
         async function init() {
-            // Try to fetch content (checks session validity)
-            await checkSession();
+            await loadContent();
         }
 
-        async function checkSession() {
+        async function loadContent() {
             try {
                 const response = await fetch('/admin/knowledge-base/content');
                 if (response.ok) {
                     const data = await response.json();
-                    loadEditor(data);
+                    document.getElementById('building-info').value = data.building_info;
+                    document.getElementById('concierge-qa').value = data.concierge_qa;
+                    updateCharCount('building');
+                    updateCharCount('qa');
                 } else {
-                    showLogin();
+                    showMessage('Failed to load content', 'error');
                 }
             } catch (error) {
-                console.error('Session check failed:', error);
-                showLogin();
+                console.error('Load error:', error);
+                showMessage('Failed to load content: Network error', 'error');
             }
-        }
-
-        function showLogin() {
-            isAuthenticated = false;
-            document.getElementById('login-view').classList.add('active');
-            document.getElementById('editor-view').classList.remove('active');
-        }
-
-        function showEditor() {
-            isAuthenticated = true;
-            document.getElementById('login-view').classList.remove('active');
-            document.getElementById('editor-view').classList.add('active');
-        }
-
-        function loadEditor(data) {
-            const buildingTextarea = document.getElementById('building-info');
-            const qaTextarea = document.getElementById('concierge-qa');
-
-            buildingTextarea.value = data.building_info;
-            qaTextarea.value = data.concierge_qa;
-
-            updateCharCount('building');
-            updateCharCount('qa');
-
-            showEditor();
         }
 
         function updateCharCount(type) {
@@ -357,7 +266,6 @@
             messageText.textContent = text;
             messageBox.className = `message show ${type}`;
 
-            // Auto-dismiss after 5 seconds
             clearTimeout(messageTimeout);
             messageTimeout = setTimeout(hideMessage, 5000);
         }
@@ -374,7 +282,6 @@
                 button.disabled = true;
                 const originalText = button.textContent;
                 button.dataset.originalText = originalText;
-                // Create loading spinner element
                 const spinner = document.createElement('span');
                 spinner.className = 'loading';
                 button.textContent = '';
@@ -386,55 +293,6 @@
             }
         }
 
-        // Authentication handlers
-        async function handleLogin(event) {
-            event.preventDefault();
-
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-
-            setButtonLoading('login-btn', true);
-            hideMessage();
-
-            try {
-                const response = await fetch('/admin/auth', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password }),
-                });
-
-                if (response.ok) {
-                    // Fetch content and show editor
-                    await checkSession();
-                    showMessage('Login successful', 'success');
-                } else {
-                    const error = await response.json();
-                    showMessage(error.error || 'Login failed', 'error');
-                }
-            } catch (error) {
-                console.error('Login error:', error);
-                showMessage('Login failed: Network error', 'error');
-            } finally {
-                setButtonLoading('login-btn', false);
-            }
-        }
-
-        async function handleLogout() {
-            try {
-                await fetch('/admin/logout', { method: 'POST' });
-                showLogin();
-                showMessage('Logged out successfully', 'success');
-
-                // Clear form
-                document.getElementById('username').value = '';
-                document.getElementById('password').value = '';
-            } catch (error) {
-                console.error('Logout error:', error);
-                showMessage('Logout failed', 'error');
-            }
-        }
-
-        // Save handler
         async function handleSave() {
             const buildingInfo = document.getElementById('building-info').value;
             const conciergeQa = document.getElementById('concierge-qa').value;
@@ -465,9 +323,6 @@
                 if (response.ok) {
                     const data = await response.json();
                     showMessage(data.message || 'Files saved successfully', 'success');
-                } else if (response.status === 401) {
-                    showMessage('Session expired, please login again', 'error');
-                    setTimeout(showLogin, 2000);
                 } else {
                     const error = await response.json();
                     showMessage(error.error || 'Save failed', 'error');
@@ -480,7 +335,6 @@
             }
         }
 
-        // Sync handler
         async function handleSync() {
             setButtonLoading('sync-btn', true);
             hideMessage();
@@ -494,9 +348,6 @@
                     const data = await response.json();
                     const charInfo = data.chars ? ` (${data.chars} characters)` : '';
                     showMessage((data.message || 'Tavus persona updated') + charInfo, 'success');
-                } else if (response.status === 401) {
-                    showMessage('Session expired, please login again', 'error');
-                    setTimeout(showLogin, 2000);
                 } else {
                     const error = await response.json();
                     showMessage(error.error || 'Sync failed', 'error');
