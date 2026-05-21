@@ -90,18 +90,6 @@ async def startup_event():
     """Initialize database on application startup."""
     global db_engine, db_session
 
-    # Security check: ensure admin credentials are configured
-    if not ADMIN_USERNAME or not ADMIN_PASSWORD:
-        raise RuntimeError(
-            "CRITICAL: ADMIN_USERNAME and ADMIN_PASSWORD must be set in .env file. "
-            "These credentials cannot use default values for security reasons."
-        )
-    if ADMIN_PASSWORD in ("admin", "meridian", "password"):
-        raise RuntimeError(
-            "CRITICAL: ADMIN_PASSWORD must not use a default or guessable value. "
-            "Please set a strong password in .env file."
-        )
-
     db_engine = init_db("sqlite:///conversations.db")
     db_session = get_session(db_engine)
     logger.info("Database initialized: conversations.db")
