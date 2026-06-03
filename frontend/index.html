@@ -683,8 +683,7 @@
   /* ========================
      LOGIN LOGIC
      ======================== */
-  const VALID_USER = "admin";
-  const VALID_PASS = "meridian";
+  const VALID_USERS = { "admin": "meridian", "buildingB": "meridian" };
 
   const loginScreen = document.getElementById("login-screen");
   const appScreen = document.getElementById("app-screen");
@@ -753,7 +752,7 @@
     const user = loginUser.value.trim();
     const pass = loginPass.value;
 
-    if (user === VALID_USER && pass === VALID_PASS) {
+    if (VALID_USERS[user] && pass === VALID_USERS[user]) {
       // Set session cookie — expires in 7 days
       var expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString();
       document.cookie = "concierge_session=1; expires=" + expires + "; path=/; SameSite=Strict";
