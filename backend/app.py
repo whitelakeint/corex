@@ -173,31 +173,62 @@ app.mount("/frontend", StaticFiles(directory=str(FRONTEND_DIR)), name="frontend"
 # Conversation lifecycle
 # ---------------------------------------------------------------------------
 @app.post("/api/conversations")
-async def create_conversation():
-    """Create a new Tavus CVI conversation and return the join URL."""
-    if not TAVUS_PERSONA_ID:
+async def create_conversation(request: Request):
+    """Create a new Tavus conversation for the specified user.
+
+    Request body:
+        {
+            "username": "admin" | "buildingB"  (optional, defaults to "admin")
+        }
+    """
+    body = await request.json()
+    username = body.get("username", "admin")
+
+    try:
+        user_config = get_user_config(username)
+    except ValueError as e:
+        logger.error(f"Invalid user in conversation request: {username}")
+        return JSONResponse(
+            status_code=400,
+            content={"error": str(e)}
+        )
+
+    persona_id = user_config["persona_id"]
+
+    if not persona_id:
+        logger.error(f"Persona not configured for user: {username}")
         return JSONResponse(
             status_code=500,
-            content={"error": "TAVUS_PERSONA_ID not configured. Run scripts/setup_persona.py first."},
+            content={"error": f"Persona not configured for {username}. Run setup_persona.py with --user {username}"}
         )
 
     data = await tavus_client.create_conversation(
-        persona_id=TAVUS_PERSONA_ID,
-        callback_url=f"{BACKEND_URL}/webhooks/tavus",
+        persona_id=persona_id,
         custom_greeting="Hello! How may I help you?",
         properties={
-            "enable_closed_captions": True,
             "max_call_duration": 600,
             "participant_left_timeout": 30,
             "participant_absent_timeout": 120,
+            "enable_recording": True,
+            "enable_transcription": True,
+            "enable_closed_captions": True,
+            "apply_greenscreen": False,
         },
+        callback_url=f"{BACKEND_URL}/webhooks/tavus",
     )
 
     conversation_id = data.get("conversation_id")
     conversation_url = data.get("conversation_url")
 
-    logger.info("Conversation created: %s", conversation_id)
-    return {"conversation_id": conversation_id, "conversation_url": conversation_url}
+    if not conversation_id or not conversation_url:
+        logger.error(f"Tavus API returned incomplete response: {data}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to create conversation: incomplete response from Tavus"}
+        )
+
+    logger.info(f"Conversation created for user {username}: {conversation_id}")
+    return JSONResponse(content=data)
 
 
 @app.post("/api/conversations/{conversation_id}/end")
