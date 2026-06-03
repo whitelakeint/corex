@@ -188,7 +188,7 @@
 <body>
     <div class="container">
         <h1>Knowledge Base Management</h1>
-        <p class="subtitle">Edit building information and concierge Q&A content</p>
+        <p class="subtitle" id="kb-subtitle">Edit building information and concierge Q&A content</p>
 
         <div id="message" class="message">
             <span id="message-text"></span>
@@ -222,16 +222,29 @@
 
     <script>
         let messageTimeout = null;
+        let currentUser = "admin";
 
         window.addEventListener('DOMContentLoaded', init);
 
         async function init() {
+            // Read user from URL query param
+            const urlParams = new URLSearchParams(window.location.search);
+            const userParam = urlParams.get("user");
+            if (userParam && (userParam === "admin" || userParam === "buildingB")) {
+                currentUser = userParam;
+            }
+
+            // Update subtitle to show which user's KB
+            const subtitle = document.getElementById('kb-subtitle');
+            const userDisplay = currentUser === 'admin' ? 'Admin / Meridian Building' : 'Building B';
+            subtitle.textContent = 'Editing: ' + userDisplay;
+
             await loadContent();
         }
 
         async function loadContent() {
             try {
-                const response = await fetch('/admin/knowledge-base/content');
+                const response = await fetch('/admin/knowledge-base/content?user=' + currentUser);
                 if (response.ok) {
                     const data = await response.json();
                     document.getElementById('building-info').value = data.building_info;
@@ -317,6 +330,7 @@
                     body: JSON.stringify({
                         building_info: buildingInfo,
                         concierge_qa: conciergeQa,
+                        user: currentUser
                     }),
                 });
 
@@ -340,7 +354,7 @@
             hideMessage();
 
             try {
-                const response = await fetch('/admin/knowledge-base/sync', {
+                const response = await fetch('/admin/knowledge-base/sync?user=' + currentUser, {
                     method: 'POST',
                 });
 

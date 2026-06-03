@@ -474,12 +474,12 @@
 
     .card-body.has-iframe {
       padding: 0;
-      min-height: 540px;
+      min-height: 800px;
     }
 
     #avatar-frame {
       width: 100%;
-      height: 540px;
+      height: 800px;
       border: none;
       display: block;
     }
@@ -563,7 +563,7 @@
 
     #jitsi-container {
       width: 100%;
-      height: 540px;
+      height: 800px;
     }
 
     footer {
@@ -592,8 +592,15 @@
 
     <form class="login-form" id="login-form" autocomplete="off">
       <div class="login-field">
+        <label for="login-userselect">Building</label>
+        <select id="login-userselect" style="width: 100%; padding: 0.8rem 1rem; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(201, 169, 110, 0.15); border-radius: 2px; color: var(--login-text); font-family: 'DM Sans', sans-serif; font-size: 0.95rem; outline: none; cursor: pointer;">
+          <option value="admin">Admin / Meridian Building</option>
+          <option value="buildingB">Building B</option>
+        </select>
+      </div>
+      <div class="login-field">
         <label for="login-user">Username</label>
-        <input type="text" id="login-user" placeholder="Enter username" autofocus />
+        <input type="text" id="login-user" placeholder="Enter username" readonly style="background: rgba(255, 255, 255, 0.02);" />
       </div>
       <div class="login-field">
         <label for="login-pass">Password</label>
@@ -616,7 +623,8 @@
     </div>
     <div class="header-right">
       <span class="badge">AI Assisted</span>
-      <button id="btn-kb" onclick="window.location.href='/admin/knowledge-base'" style="background: rgba(255, 255, 255, 0.1); color: #fff; border: 1px solid rgba(255, 255, 255, 0.2); padding: 0.5rem 1rem; font-size: 0.8rem; border-radius: 6px; cursor: pointer; margin-right: 0.5rem;">Update KB</button>
+      <button id="btn-kb" onclick="navigateToKB()" style="background: rgba(255, 255, 255, 0.1); color: #fff; border: 1px solid rgba(255, 255, 255, 0.2); padding: 0.5rem 1rem; font-size: 0.8rem; border-radius: 6px; cursor: pointer; margin-right: 0.5rem;">Update KB</button>
+      <button id="btn-history" onclick="window.location.href='/conversations'" style="background: rgba(255, 255, 255, 0.1); color: #fff; border: 1px solid rgba(255, 255, 255, 0.2); padding: 0.5rem 1rem; font-size: 0.8rem; border-radius: 6px; cursor: pointer; margin-right: 0.5rem;">Conversation History</button>
       <button id="btn-logout">Logout</button>
     </div>
   </header>
@@ -684,6 +692,18 @@
   const loginError = document.getElementById("login-error");
   const loginUser = document.getElementById("login-user");
   const loginPass = document.getElementById("login-pass");
+  const loginUserSelect = document.getElementById("login-userselect");
+
+  // Pre-fill username based on dropdown selection
+  function updateUsernameField() {
+    loginUser.value = loginUserSelect.value;
+  }
+
+  // Initialize on page load
+  updateUsernameField();
+
+  // Update on dropdown change
+  loginUserSelect.addEventListener("change", updateUsernameField);
 
   // Check for existing session cookie — skip login if present
   var hasSession = document.cookie.split(";").some(function(c) {
@@ -692,6 +712,12 @@
 
   if (hasSession && !resumeConversationId) {
     console.log("[Session] Existing session found, skipping login");
+    // Restore username from sessionStorage if available
+    var storedUser = sessionStorage.getItem("currentUser");
+    if (storedUser && (storedUser === "admin" || storedUser === "buildingB")) {
+      loginUserSelect.value = storedUser;
+      updateUsernameField();
+    }
     loginScreen.style.display = "none";
     appScreen.classList.add("visible");
   }
@@ -731,6 +757,9 @@
       // Set session cookie — expires in 7 days
       var expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString();
       document.cookie = "concierge_session=1; expires=" + expires + "; path=/; SameSite=Strict";
+
+      // Store current user in sessionStorage
+      sessionStorage.setItem("currentUser", user);
 
       loginError.classList.remove("visible");
       loginScreen.classList.add("hidden");
@@ -773,6 +802,8 @@
 
     // Clear session cookie
     document.cookie = "concierge_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Strict";
+
+    sessionStorage.removeItem("currentUser");
 
     // Hide app screen and show login screen
     appScreen.classList.remove("visible");
@@ -826,7 +857,13 @@
     }
 
     try {
-      const res = await fetch(API_BASE + "/api/conversations", { method: "POST" });
+      var username = sessionStorage.getItem("currentUser") || "admin";
+
+      const res = await fetch(API_BASE + "/api/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: username })
+      });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || "Server error " + res.status);
@@ -847,7 +884,7 @@
       dailyCall = window.Daily.createFrame(cardBody, {
         iframeStyle: {
           width: "100%",
-          height: "540px",
+          height: "800px",
           border: "none",
         },
         showLeaveButton: false,
@@ -957,6 +994,14 @@
 
     endEverything();
   });
+
+  /* ========================
+     KB NAVIGATION
+     ======================== */
+  function navigateToKB() {
+    var username = sessionStorage.getItem("currentUser") || "admin";
+    window.location.href = "/admin/knowledge-base?user=" + username;
+  }
 
   /* ========================
      LOGOUT BUTTON
