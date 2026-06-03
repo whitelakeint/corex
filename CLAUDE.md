@@ -19,6 +19,52 @@ Browser (frontend/index.html)
 
 The Tavus persona (created via `scripts/setup_persona.py`) defines the avatar's behavior through a system prompt encoding 9 Q&A categories (visitor ID, access, leasing, directions, packages, amenities, safety, escalation, closing) and 5 tool definitions (notify_resident, unlock_door, schedule_tour, notify_management, log_delivery).
 
+## Multi-User Support
+
+The application supports multiple users with separate avatars and knowledge bases:
+
+**Users:**
+- `admin` - Meridian Building (default)
+- `buildingB` - Building B
+
+**Configuration:**
+Users are defined in `backend/config.py` USERS dict. Each user has:
+- Password (both use "meridian")
+- Tavus persona_id (different avatar)
+- Tavus replica_id (different appearance)
+- KB directory path (separate content)
+
+**Login:**
+- Dropdown selection on login screen
+- Username auto-filled based on selection
+- SessionStorage persists user selection
+
+**Conversation Flow:**
+- Frontend sends `username` in POST /api/conversations
+- Backend looks up user's persona_id
+- Creates conversation with user-specific Tavus persona
+
+**KB Management:**
+- KB page detects user from URL param: `/admin/knowledge-base?user=buildingB`
+- Load/save/sync operations target user-specific KB directory
+- Complete isolation between users
+
+**Creating New User Personas:**
+```bash
+# Create persona for a user
+python -m scripts.setup_persona --user buildingB --replica <replica_id>
+
+# Copy returned persona_id to .env
+BUILDINGB_PERSONA_ID=<persona_id>
+```
+
+**Adding New Users:**
+1. Add entry to USERS dict in `backend/config.py`
+2. Create KB directory: `knowledge-base/<username>/`
+3. Add persona/replica env vars to `.env`
+4. Run `setup_persona.py` with new user
+5. Add option to login dropdown in `frontend/index.html`
+
 ## Commands
 
 ```bash
