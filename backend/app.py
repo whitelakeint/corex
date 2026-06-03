@@ -21,7 +21,7 @@ from sqlalchemy import desc, asc
 from sqlalchemy.exc import IntegrityError
 
 from backend import tavus_client, tool_stubs
-from backend.config import BACKEND_URL, TAVUS_PERSONA_ID, ADMIN_USERNAME, ADMIN_PASSWORD
+from backend.config import BACKEND_URL, TAVUS_PERSONA_ID, ADMIN_USERNAME, ADMIN_PASSWORD, USERS
 from backend.models import init_db, get_session, Conversation, extract_visitor_name
 
 logging.basicConfig(
@@ -73,6 +73,30 @@ def destroy_session(session_id: str) -> None:
     """Remove session from store."""
     _admin_sessions.pop(session_id, None)
     logger.info(f"Session destroyed: {session_id[:8]}...")
+
+
+def validate_user(username: str, password: str) -> bool:
+    """Validate username and password against USERS dict."""
+    if username not in USERS:
+        return False
+    return USERS[username]["password"] == password
+
+
+def get_user_config(username: str) -> dict:
+    """Get user configuration.
+
+    Args:
+        username: Username to look up
+
+    Returns:
+        User config dict with persona_id, replica_id, kb_path
+
+    Raises:
+        ValueError: If username not found
+    """
+    if username not in USERS:
+        raise ValueError(f"Unknown user: {username}")
+    return USERS[username]
 
 
 app = FastAPI(title="Building Concierge API")
