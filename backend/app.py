@@ -394,6 +394,7 @@ class AdminAuthRequest(BaseModel):
 class KnowledgeBaseSaveRequest(BaseModel):
     building_info: str
     concierge_qa: str
+    user: str = "admin"
 
 
 @app.post("/api/notify-resident")
@@ -482,126 +483,158 @@ async def admin_auth(body: AdminAuthRequest, response: Response):
 
 
 @app.get("/admin/knowledge-base/content")
-async def get_kb_content():
-    """Get current knowledge base file contents."""
+async def get_kb_content(user: str = "admin"):
+    """Get current knowledge base file contents for specified user.
+
+    Query params:
+        user: Username (admin or buildingB), defaults to admin
+    """
     try:
-        building_info_path = FRONTEND_DIR.parent / "knowledge-base" / "building_info.txt"
-        concierge_qa_path = FRONTEND_DIR.parent / "knowledge-base" / "concierge_qa.txt"
+        user_config = get_user_config(user)
+    except ValueError as e:
+        logger.error(f"Invalid user in KB content request: {user}")
+        return JSONResponse(
+            status_code=400,
+            content={"error": str(e)}
+        )
 
-        building_info = building_info_path.read_text()
-        concierge_qa = concierge_qa_path.read_text()
+    kb_base = FRONTEND_DIR.parent / user_config["kb_path"]
+    building_info_path = kb_base / "building_info.txt"
+    concierge_qa_path = kb_base / "concierge_qa.txt"
 
-        logger.info("Knowledge base content retrieved")
+    # Auto-create directory if doesn't exist
+    kb_base.mkdir(parents=True, exist_ok=True)
+
+    try:
+        building_info = building_info_path.read_text() if building_info_path.exists() else ""
+        concierge_qa = concierge_qa_path.read_text() if concierge_qa_path.exists() else ""
+        logger.info(f"Knowledge base content retrieved for user: {user}")
         return {
             "building_info": building_info,
             "concierge_qa": concierge_qa,
         }
-    except FileNotFoundError as e:
-        logger.error(f"Knowledge base file not found: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={"error": "Failed to read knowledge base files"},
-        )
     except Exception as e:
-        logger.error(f"Error reading knowledge base: {e}")
+        logger.error(f"Failed to read KB files for {user}: {e}")
         return JSONResponse(
             status_code=500,
-            content={"error": f"Failed to read knowledge base files: {str(e)}"},
+            content={"error": f"Failed to load knowledge base for {user}"}
         )
 
 
 @app.post("/admin/knowledge-base/save")
 async def save_kb_content(body: KnowledgeBaseSaveRequest):
-    """Save knowledge base file contents."""
-    # Validate non-empty
-    if not body.building_info or not body.building_info.strip():
+    """Save knowledge base files for specified user.
+
+    Request body:
+        {
+            "building_info": "...",
+            "concierge_qa": "...",
+            "user": "admin" | "buildingB"  (optional, defaults to admin)
+        }
+    """
+    try:
+        user_config = get_user_config(body.user)
+    except ValueError as e:
+        logger.error(f"Invalid user in KB save request: {body.user}")
         return JSONResponse(
             status_code=400,
-            content={"error": "Content cannot be empty: building_info"},
+            content={"error": str(e)}
         )
-    if not body.concierge_qa or not body.concierge_qa.strip():
+
+    if not body.building_info.strip():
         return JSONResponse(
             status_code=400,
-            content={"error": "Content cannot be empty: concierge_qa"},
+            content={"error": "Building information cannot be empty"}
         )
+
+    if not body.concierge_qa.strip():
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Concierge Q&A cannot be empty"}
+        )
+
+    kb_base = FRONTEND_DIR.parent / user_config["kb_path"]
+    building_info_path = kb_base / "building_info.txt"
+    concierge_qa_path = kb_base / "concierge_qa.txt"
+
+    # Auto-create directory if doesn't exist
+    kb_base.mkdir(parents=True, exist_ok=True)
 
     try:
-        kb_dir = FRONTEND_DIR.parent / "knowledge-base"
-        building_info_path = kb_dir / "building_info.txt"
-        concierge_qa_path = kb_dir / "concierge_qa.txt"
-
         building_info_path.write_text(body.building_info)
         concierge_qa_path.write_text(body.concierge_qa)
-
-        logger.info("Knowledge base files saved")
-        return {
-            "status": "ok",
-            "message": "Files saved successfully",
-        }
-    except PermissionError:
-        logger.error("Permission denied writing to knowledge-base/")
-        return JSONResponse(
-            status_code=500,
-            content={"error": "Permission denied writing to knowledge-base/"},
-        )
+        logger.info(f"Knowledge base files saved for user: {body.user}")
+        return {"status": "ok", "message": "Files saved successfully"}
     except Exception as e:
-        logger.error(f"Error saving knowledge base: {e}")
+        logger.error(f"Failed to save KB files for {body.user}: {e}")
         return JSONResponse(
             status_code=500,
-            content={"error": f"Failed to save files: {str(e)}"},
+            content={"error": f"Failed to save files: {str(e)}"}
         )
 
 
 @app.post("/admin/knowledge-base/sync")
-async def sync_kb_to_tavus():
-    """Sync knowledge base content to Tavus persona context."""
-    if not TAVUS_PERSONA_ID or TAVUS_PERSONA_ID == "your_persona_id_here":
-        return JSONResponse(
-            status_code=500,
-            content={"error": "Invalid TAVUS_PERSONA_ID configuration"},
-        )
+async def sync_kb_to_tavus(request: Request):
+    """Sync knowledge base to Tavus persona for specified user.
+
+    Query params:
+        user: Username (admin or buildingB), defaults to admin
+    """
+    params = request.query_params
+    user = params.get("user", "admin")
 
     try:
-        kb_dir = FRONTEND_DIR.parent / "knowledge-base"
-        building_info_path = kb_dir / "building_info.txt"
-        concierge_qa_path = kb_dir / "concierge_qa.txt"
-
-        building_info = building_info_path.read_text()
-        concierge_qa = concierge_qa_path.read_text()
-
-        # Combine content (same logic as update_persona_context.py)
-        combined = (
-            building_info.strip()
-            + "\n\n"
-            + "=" * 40
-            + "\n"
-            + concierge_qa.strip()
+        user_config = get_user_config(user)
+    except ValueError as e:
+        logger.error(f"Invalid user in KB sync request: {user}")
+        return JSONResponse(
+            status_code=400,
+            content={"error": str(e)}
         )
 
-        operations = [
-            {"op": "replace", "path": "/context", "value": combined},
-        ]
+    persona_id = user_config["persona_id"]
 
-        result = await tavus_client.patch_persona(TAVUS_PERSONA_ID, operations)
+    if not persona_id:
+        logger.error(f"Persona not configured for user: {user}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Persona not configured for {user}. Run setup_persona.py with --user {user}"}
+        )
 
-        logger.info(f"Tavus persona synced ({len(combined)} chars)")
+    kb_base = FRONTEND_DIR.parent / user_config["kb_path"]
+    building_info_path = kb_base / "building_info.txt"
+    concierge_qa_path = kb_base / "concierge_qa.txt"
 
+    try:
+        building_info = building_info_path.read_text()
+        concierge_qa = concierge_qa_path.read_text()
+    except Exception as e:
+        logger.error(f"Failed to read KB files for sync (user: {user}): {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to read knowledge base files for {user}"}
+        )
+
+    combined_context = f"{building_info}\n\n---\n\n{concierge_qa}"
+    char_count = len(combined_context)
+
+    operations = [
+        {"op": "replace", "path": "/context", "value": combined_context}
+    ]
+
+    try:
+        result = await tavus_client.patch_persona(persona_id, operations)
+        logger.info(f"Tavus persona updated for user {user}: {char_count} chars")
         return {
             "status": "ok",
             "message": "Tavus persona updated",
-            "chars": len(combined),
+            "chars": char_count
         }
-    except FileNotFoundError as e:
-        logger.error(f"Knowledge base file not found during sync: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={"error": "Failed to read knowledge base files"},
-        )
     except Exception as e:
-        logger.error(f"Error syncing to Tavus: {e}")
+        logger.error(f"Tavus API error during sync (user: {user}): {e}")
         return JSONResponse(
             status_code=500,
-            content={"error": f"Tavus API error: {str(e)}"},
+            content={"error": f"Tavus API error: {str(e)}"}
         )
 
 
