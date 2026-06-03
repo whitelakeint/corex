@@ -12,3 +12,19 @@ JITSI_BASE_URL: str = os.getenv("JITSI_BASE_URL", "https://meet.whitelakedigital
 # Admin session configuration
 ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "")
 ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "")
+
+# Multi-user configuration
+USERS = {
+    "admin": {
+        "password": "meridian",
+        "persona_id": os.getenv("ADMIN_PERSONA_ID", os.getenv("TAVUS_PERSONA_ID", "")),
+        "replica_id": os.getenv("ADMIN_REPLICA_ID", TAVUS_REPLICA_ID),
+        "kb_path": "knowledge-base/admin"
+    },
+    "buildingB": {
+        "password": "meridian",
+        "persona_id": os.getenv("BUILDINGB_PERSONA_ID", ""),
+        "replica_id": "r90bbd427f71",
+        "kb_path": "knowledge-base/buildingB"
+    }
+}
