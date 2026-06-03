@@ -10,6 +10,7 @@ TAVUS_PERSONA_ID.
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import sys
@@ -18,7 +19,7 @@ import os
 # Ensure project root is on the path so `backend.*` imports resolve.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.config import TAVUS_API_KEY, TAVUS_REPLICA_ID, BACKEND_URL
+from backend.config import TAVUS_API_KEY, BACKEND_URL, USERS
 from backend import tavus_client
 
 SYSTEM_PROMPT = """\
@@ -257,7 +258,7 @@ TOOL_DEFINITIONS = [
 PERSONA_PAYLOAD = {
     "persona_name": "Building Concierge",
     "pipeline_mode": "full",
-    "default_replica_id": TAVUS_REPLICA_ID,
+    "default_replica_id": "",  # Will be set in main()
     "system_prompt": SYSTEM_PROMPT,
     "layers": {
         "perception": {
@@ -293,13 +294,56 @@ PERSONA_PAYLOAD = {
 
 
 async def main() -> None:
+    parser = argparse.ArgumentParser(description="Create a Tavus persona for a user")
+    parser.add_argument(
+        "--user",
+        type=str,
+        choices=list(USERS.keys()),
+        default="admin",
+        help="User to create persona for (admin or buildingB)"
+    )
+    parser.add_argument(
+        "--replica",
+        type=str,
+        help="Replica ID to use (overrides user config)"
+    )
+    args = parser.parse_args()
+
     if not TAVUS_API_KEY or TAVUS_API_KEY == "your_tavus_api_key_here":
         print("ERROR: Set TAVUS_API_KEY in your .env file before running this script.")
         sys.exit(1)
 
-    print("Creating persona on Tavus...")
-    print(f"  Replica ID : {TAVUS_REPLICA_ID}")
+    user_config = USERS[args.user]
+    replica_id = args.replica if args.replica else user_config["replica_id"]
+
+    if not replica_id:
+        print(f"ERROR: No replica_id configured for user {args.user}")
+        print(f"Usage: python -m scripts.setup_persona --user {args.user} --replica <replica_id>")
+        sys.exit(1)
+
+    # Load KB files for this user to build context
+    kb_base_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), user_config["kb_path"])
+    building_info_path = os.path.join(kb_base_path, "building_info.txt")
+    concierge_qa_path = os.path.join(kb_base_path, "concierge_qa.txt")
+
+    if os.path.exists(building_info_path) and os.path.exists(concierge_qa_path):
+        with open(building_info_path, "r") as f:
+            building_info = f.read()
+        with open(concierge_qa_path, "r") as f:
+            concierge_qa = f.read()
+        combined_context = f"{building_info}\n\n---\n\n{concierge_qa}"
+    else:
+        print(f"WARNING: KB files not found for {args.user}, using empty context")
+        combined_context = ""
+
+    # Update PERSONA_PAYLOAD with user-specific values
+    PERSONA_PAYLOAD["default_replica_id"] = replica_id
+    PERSONA_PAYLOAD["context"] = combined_context
+
+    print(f"Creating persona for user: {args.user}")
+    print(f"  Replica ID : {replica_id}")
     print(f"  Callback   : {BACKEND_URL}/webhooks/tavus")
+    print(f"  Context    : {len(combined_context)} characters")
 
     result = await tavus_client.create_persona(PERSONA_PAYLOAD)
 
@@ -309,7 +353,12 @@ async def main() -> None:
     print(f"  persona_id: {persona_id}")
     print()
     print("Add this to your .env file:")
-    print(f"  TAVUS_PERSONA_ID={persona_id}")
+    if args.user == "admin":
+        print(f"  ADMIN_PERSONA_ID={persona_id}")
+    elif args.user == "buildingB":
+        print(f"  BUILDINGB_PERSONA_ID={persona_id}")
+    else:
+        print(f"  {args.user.upper()}_PERSONA_ID={persona_id}")
 
 
 if __name__ == "__main__":
