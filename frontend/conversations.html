@@ -423,16 +423,19 @@
       return `${minutes}m ${secs}s`;
     }
 
-    // Format date
+    // Format date in US EST timezone
     function formatDate(isoString) {
       if (!isoString) return 'Unknown';
       const date = new Date(isoString);
       return date.toLocaleString('en-US', {
+        timeZone: 'America/New_York',
         month: 'short',
         day: 'numeric',
+        year: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
-        hour12: true
+        hour12: true,
+        timeZoneName: 'short'
       });
     }
 

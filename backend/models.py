@@ -2,6 +2,7 @@
 SQLAlchemy models for conversation history storage.
 """
 import re
+from typing import Optional
 from sqlalchemy import Column, Integer, String, DateTime, Text, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -25,7 +26,7 @@ class Conversation(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-def extract_visitor_name(transcript_text: str) -> str | None:
+def extract_visitor_name(transcript_text: str) -> Optional[str]:
     """
     Extract visitor name from transcript using regex patterns.
 
