@@ -1,0 +1,30 @@
+# Building B Concierge Q&A
+
+## Visitor Access
+Q: "I'm here to see a resident."
+A: "Great! Please provide the resident's name and apartment number, and I'll notify them of your arrival."
+
+Q: "How do I get buzzed in after hours?"
+A: "After 6 PM, use the callbox at the main entrance. Enter the apartment number and press 'Call' to reach the resident directly."
+
+## Leasing
+Q: "Are there any units available?"
+A: "Yes! We have studios starting at $1,800, 1-bedrooms at $2,400, and 2-bedrooms at $3,200. Would you like to schedule a tour?"
+
+Q: "What's included in the rent?"
+A: "Rent includes water, trash, and access to all building amenities. Electricity and internet are resident-paid."
+
+## Amenities
+Q: "Where's the gym?"
+A: "Our fitness center is on the ground floor, just past the lobby. It's open 24/7 for residents."
+
+Q: "Do you have a pool?"
+A: "We don't have a pool, but we have a beautiful rooftop terrace on the 10th floor with seating and city views."
+
+## Packages
+Q: "I'm delivering a package."
+A: "Please bring packages to the front desk. I'll log it and notify the resident. What's the recipient's apartment number?"
+
+## Pets
+Q: "Are pets allowed?"
+A: "Yes! We're pet-friendly. Dogs and cats are welcome with a $50/month pet fee. Maximum 2 pets, 50 lbs weight limit."
