@@ -765,13 +765,6 @@
       setTimeout(() => {
         loginScreen.style.display = "none";
         appScreen.classList.add("visible");
-
-        // Auto-start conversation after login
-        setTimeout(() => {
-          console.log("[Auto-start] Starting conversation for user:", user);
-          setStatus("Connecting...", "connecting");
-          document.getElementById("btn-start").click();
-        }, 500);
       }, 600);
     } else {
       loginError.classList.add("visible");
@@ -896,7 +889,6 @@
         showLeaveButton: false,
         showFullscreenButton: false,
         showParticipantsBar: false,
-        url: conversationUrl,
       });
 
       // Listen for tool call events from Tavus CVI
@@ -927,14 +919,7 @@
         }
       });
 
-      // Join with video/audio off to skip prejoin, then enable audio after joining
-      await dailyCall.join({
-        startVideoOff: true,
-        startAudioOff: false
-      });
-
-      // Enable microphone after joining (camera stays off)
-      await dailyCall.setLocalAudio(true);
+      await dailyCall.join({ url: conversationUrl });
 
       // Show end button below Daily frame
       actions.style.display = "flex";
