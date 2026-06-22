@@ -765,6 +765,12 @@
       setTimeout(() => {
         loginScreen.style.display = "none";
         appScreen.classList.add("visible");
+
+        // Auto-start conversation after login
+        setTimeout(() => {
+          console.log("[Auto-start] Starting conversation for user:", user);
+          document.getElementById("btn-start").click();
+        }, 500);
       }, 600);
     } else {
       loginError.classList.add("visible");
