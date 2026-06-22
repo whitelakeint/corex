@@ -927,8 +927,14 @@
         }
       });
 
-      // Join with startVideoOff and startAudioOff set to false to skip prejoin
-      await dailyCall.join();
+      // Join with video/audio off to skip prejoin, then enable audio after joining
+      await dailyCall.join({
+        startVideoOff: true,
+        startAudioOff: false
+      });
+
+      // Enable microphone after joining (camera stays off)
+      await dailyCall.setLocalAudio(true);
 
       // Show end button below Daily frame
       actions.style.display = "flex";
