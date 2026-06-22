@@ -213,6 +213,7 @@ async def create_conversation(request: Request):
             "enable_transcription": True,
             "enable_closed_captions": True,
             "apply_greenscreen": False,
+            "enable_prejoin_ui": False,
         },
         callback_url=f"{BACKEND_URL}/webhooks/tavus",
     )
