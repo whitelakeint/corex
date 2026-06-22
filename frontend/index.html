@@ -896,6 +896,7 @@
         showLeaveButton: false,
         showFullscreenButton: false,
         showParticipantsBar: false,
+        url: conversationUrl,
       });
 
       // Listen for tool call events from Tavus CVI
@@ -926,28 +927,8 @@
         }
       });
 
-      await dailyCall.join({
-        url: conversationUrl,
-        showLeaveButton: false,
-        showFullscreenButton: false
-      });
-
-      // Auto-click join button if prejoin screen appears
-      setTimeout(function() {
-        var iframe = dailyCall.iframe();
-        if (iframe && iframe.contentWindow) {
-          try {
-            var joinBtn = iframe.contentWindow.document.querySelector('[data-testid="prejoin-join-button"], button[type="submit"]');
-            if (joinBtn) {
-              joinBtn.click();
-              console.log("[Auto-join] Clicked prejoin join button");
-            }
-          } catch (e) {
-            // Cross-origin iframe - cannot access
-            console.log("[Auto-join] Cannot access iframe (cross-origin)");
-          }
-        }
-      }, 1000);
+      // Join with startVideoOff and startAudioOff set to false to skip prejoin
+      await dailyCall.join();
 
       // Show end button below Daily frame
       actions.style.display = "flex";
