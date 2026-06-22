@@ -898,10 +898,8 @@
         showParticipantsBar: false,
       });
 
-      // Set call options to skip prejoin screen
-      dailyCall.setCallOptions({
-        prejoinPageEnabled: false,
-      });
+      // Preauth to skip prejoin screen
+      await dailyCall.preAuth({ url: conversationUrl });
 
       // Listen for tool call events from Tavus CVI
       dailyCall.on("app-message", function (event) {
