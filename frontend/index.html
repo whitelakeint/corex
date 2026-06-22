@@ -932,6 +932,23 @@
         showFullscreenButton: false
       });
 
+      // Auto-click join button if prejoin screen appears
+      setTimeout(function() {
+        var iframe = dailyCall.iframe();
+        if (iframe && iframe.contentWindow) {
+          try {
+            var joinBtn = iframe.contentWindow.document.querySelector('[data-testid="prejoin-join-button"], button[type="submit"]');
+            if (joinBtn) {
+              joinBtn.click();
+              console.log("[Auto-join] Clicked prejoin join button");
+            }
+          } catch (e) {
+            // Cross-origin iframe - cannot access
+            console.log("[Auto-join] Cannot access iframe (cross-origin)");
+          }
+        }
+      }, 1000);
+
       // Show end button below Daily frame
       actions.style.display = "flex";
       actions.style.padding = "1rem 2rem";
