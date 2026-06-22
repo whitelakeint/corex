@@ -898,9 +898,6 @@
         showParticipantsBar: false,
       });
 
-      // Preauth to skip prejoin screen
-      await dailyCall.preAuth({ url: conversationUrl });
-
       // Listen for tool call events from Tavus CVI
       dailyCall.on("app-message", function (event) {
         var msg = event.data;
@@ -929,7 +926,11 @@
         }
       });
 
-      await dailyCall.join({ url: conversationUrl });
+      await dailyCall.join({
+        url: conversationUrl,
+        showLeaveButton: false,
+        showFullscreenButton: false
+      });
 
       // Show end button below Daily frame
       actions.style.display = "flex";
