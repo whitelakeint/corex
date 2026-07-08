@@ -39,3 +39,8 @@ config.yaml
 frontend/media/*.mp4
 # YOLO weights auto-downloaded by ultralytics
 *.pt
+
+# Laravel admin — dependencies / local env if the app is built inside admin/
+admin/vendor/
+admin/node_modules/
+admin/.env

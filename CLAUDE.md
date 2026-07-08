@@ -81,6 +81,28 @@ via a local WebSocket). Spec: `presence-gated-tavus-kiosk-spec.md`.
 - Config comes from `config.yaml` (copy from `config.example.yaml`); the property
   is fixed by config/env rather than chosen at a login screen.
 
+## Transcripts, Unanswered Questions & KB Loop (backend/capture + admin/)
+
+Stores conversation transcripts in MySQL, detects questions the bot couldn't
+answer, and feeds a Laravel-based expert review → approval → publish loop that
+appends approved Q&A to the Tavus persona context. Multi-tenant: every record is
+tagged with `BOT_ID` (one bot per deployment). Full guide: `TRANSCRIPTS_KB.md`.
+
+- **`backend/transcripts.py`** — pure normalise + "bot couldn't answer" detection
+  (deflection-phrase matching, no LLM). Unit-tested, no DB.
+- **`backend/db.py`** — SQLAlchemy Core tables mirroring the Laravel migrations
+  (Laravel is the schema source of truth) + repository functions.
+- **`backend/capture.py`** — orchestration; best-effort (DB outage logs a
+  warning, never breaks a webhook). Called from `application.transcription_ready`.
+- **`backend/app.py`** — webhook ingest + `POST /api/conversations/{id}/ingest-transcript`
+  fallback for NAT'd kiosks; records conversation start on manual create.
+- Config: `BOT_ID`, `PROPERTY_NAME`, `DATABASE_URL`, `CAPTURE_ENABLED`.
+- **`admin/`** — Laravel admin scaffold (drop into a fresh Laravel skeleton).
+  Migrations = schema source of truth; `db/schema.sql` mirrors them. Publish via
+  `admin/app/Services/TavusPublisher.php` (rebuild context + PATCH persona).
+- Detection signals live in the `deflection_phrases` table (admin-tunable);
+  seeded from `backend/transcripts.py::DEFAULT_DEFLECTION_PHRASES`.
+
 ## Key Files
 
 - **`backend/app.py`** — FastAPI server: 7 API endpoints + serves frontend at `/`. Conversation creation calls Tavus API with persona_id and session properties nested under a `properties` dict.

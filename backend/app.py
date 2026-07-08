@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from backend import tavus_client, tool_stubs
+from backend import capture, tavus_client, tool_stubs
 from backend.config import (
     BACKEND_URL,
     KIOSK_MODE,
@@ -100,7 +100,25 @@ async def create_conversation():
     conversation_url = data.get("conversation_url")
 
     logger.info("Conversation created: %s", conversation_id)
+    # Historical record: log the session start against this bot (best-effort).
+    capture.record_conversation_started(conversation_id, source="manual")
     return {"conversation_id": conversation_id, "conversation_url": conversation_url}
+
+
+@app.post("/api/conversations/{conversation_id}/ingest-transcript")
+async def ingest_transcript_endpoint(conversation_id: str):
+    """Fallback transcript ingestion for deployments that can't receive the
+    Tavus webhook (e.g. a NAT'd kiosk). Fetches the conversation from Tavus and
+    stores whatever transcript it exposes. A cron/Laravel job can poll this."""
+    try:
+        data = await tavus_client.get_conversation(conversation_id)
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(status_code=502, content={"error": str(exc)})
+
+    # Normalise to the shape capture.ingest_transcript expects.
+    payload = {"conversation_id": conversation_id, "properties": data}
+    summary = capture.ingest_transcript(payload)
+    return summary
 
 
 @app.post("/api/conversations/{conversation_id}/end")
@@ -290,8 +308,9 @@ async def tavus_webhook(request: Request):
 
     # --- Other event types ---
     if event_type == "application.transcription_ready":
-        transcript = payload.get("properties", {}).get("transcript", "")
-        logger.info("Transcript ready: %s", transcript[:200])
+        # Persist the transcript + queue any questions the bot couldn't answer.
+        summary = capture.ingest_transcript(payload)
+        logger.info("Transcript ingested: %s", summary)
 
     elif event_type == "application.recording_ready":
         recording_url = payload.get("properties", {}).get("recording_url", "")

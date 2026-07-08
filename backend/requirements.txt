@@ -2,3 +2,6 @@ fastapi
 uvicorn
 httpx
 python-dotenv
+# Transcript / knowledge-base capture into MySQL (shared with the Laravel admin)
+SQLAlchemy>=2
+PyMySQL

@@ -24,3 +24,21 @@ SKIP_LOGIN: bool = _as_bool(os.getenv("SKIP_LOGIN", "false")) or KIOSK_MODE
 PROPERTY_NAME: str = os.getenv("PROPERTY_NAME", "The Meridian")
 # Local WebSocket the browser connects to for controller commands.
 KIOSK_WS_URL: str = os.getenv("KIOSK_WS_URL", "ws://127.0.0.1:8765")
+
+# --- Bot identity (multi-tenant) --------------------------------------------
+# Each physical deployment is pinned to ONE bot/site via config. Every
+# conversation, transcript and unanswered question captured by this instance is
+# tagged with this slug so the Laravel admin can tell which bot had the problem.
+BOT_ID: str = os.getenv("BOT_ID", "default")
+BOT_NAME: str = os.getenv("BOT_NAME", PROPERTY_NAME)
+
+# --- Transcript / knowledge-base database (shared with the Laravel admin) ----
+# Points at the same MySQL database the Laravel admin manages. Default targets a
+# local XAMPP MySQL (root / no password). Capture degrades gracefully (logs a
+# warning, never breaks a webhook) if the DB is unreachable.
+DATABASE_URL: str = os.getenv(
+    "DATABASE_URL",
+    "mysql+pymysql://root:@127.0.0.1:3306/corex?charset=utf8mb4",
+)
+# Set false to disable all DB writes (e.g. a kiosk with no DB access).
+CAPTURE_ENABLED: bool = _as_bool(os.getenv("CAPTURE_ENABLED", "true"))
