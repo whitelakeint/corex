@@ -14,7 +14,14 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from backend import tavus_client, tool_stubs
-from backend.config import BACKEND_URL, TAVUS_PERSONA_ID
+from backend.config import (
+    BACKEND_URL,
+    KIOSK_MODE,
+    KIOSK_WS_URL,
+    PROPERTY_NAME,
+    SKIP_LOGIN,
+    TAVUS_PERSONA_ID,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,6 +53,23 @@ async def serve_frontend():
 
 
 app.mount("/frontend", StaticFiles(directory=str(FRONTEND_DIR)), name="frontend")
+
+
+@app.get("/api/config")
+async def frontend_config():
+    """Runtime config for the web portal.
+
+    Lets the same static page run as a manual portal or a presence-gated kiosk
+    without a rebuild: when ``kiosk_mode`` is true the browser skips the login
+    screen, shows the attract loop, and takes its conversation lifecycle from
+    the controller over the local WebSocket instead of the Start button.
+    """
+    return {
+        "kiosk_mode": KIOSK_MODE,
+        "skip_login": SKIP_LOGIN,
+        "property_name": PROPERTY_NAME,
+        "ws_url": KIOSK_WS_URL,
+    }
 
 
 # ---------------------------------------------------------------------------

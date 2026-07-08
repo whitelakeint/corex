@@ -1,6 +1,7 @@
 # Environment variables
 .env
 .env.*
+!.env.example
 
 # Python
 __pycache__/
@@ -32,3 +33,9 @@ Thumbs.db
 # Server runtime
 server.log
 server.pid
+
+# Kiosk — site-local config + large media assets (see config.example.yaml)
+config.yaml
+frontend/media/*.mp4
+# YOLO weights auto-downloaded by ultralytics
+*.pt

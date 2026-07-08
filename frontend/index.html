@@ -572,9 +572,119 @@
       font-size: 0.75rem;
       color: var(--text-muted);
     }
+
+    /* =====================================================
+       KIOSK MODE (presence-gated, fullscreen, no chrome)
+       ===================================================== */
+
+    /* Fullscreen attract / greeting video layers. Hidden unless kiosk mode
+       shows them. The live Tavus room is the app card underneath. */
+    .kiosk-layer {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: linear-gradient(135deg, var(--login-bg) 0%, var(--login-bg-mid) 100%);
+    }
+
+    .kiosk-layer.visible { display: flex; }
+
+    .kiosk-layer video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Fallback shown behind/instead of the video (e.g. media file missing). */
+    .kiosk-fallback {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: var(--login-text);
+      z-index: -1;
+    }
+
+    .kiosk-fallback .mark {
+      width: 72px;
+      height: 72px;
+      border: 2px solid var(--accent);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: "Playfair Display", Georgia, serif;
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 1.25rem;
+    }
+
+    .kiosk-fallback h2 {
+      font-family: "Playfair Display", Georgia, serif;
+      font-size: 2rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.5rem;
+    }
+
+    .kiosk-fallback p {
+      font-size: 0.9rem;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      color: var(--login-text-dim);
+    }
+
+    /* When kiosk mode is on, the app card fills the screen and chrome hides. */
+    body.kiosk #login-screen { display: none !important; }
+    body.kiosk header,
+    body.kiosk footer,
+    body.kiosk #btn-logout,
+    body.kiosk #actions { display: none !important; }
+    body.kiosk main { padding: 0; }
+    body.kiosk .card {
+      max-width: none;
+      width: 100vw;
+      min-height: 100vh;
+      border-radius: 0;
+      box-shadow: none;
+    }
+    body.kiosk .card-header { display: none; }
+    body.kiosk .card-body,
+    body.kiosk .card-body.has-iframe { min-height: 100vh; padding: 0; }
+    body.kiosk #jitsi-container { height: 100vh; }
   </style>
 </head>
 <body>
+
+<!-- ==================== KIOSK VIDEO LAYERS ==================== -->
+<!-- Only used in kiosk mode. Attract loops while idle (zero Tavus cost);
+     greeting is a short bridge clip while the room spins up. -->
+<div id="kiosk-attract" class="kiosk-layer">
+  <div class="kiosk-fallback">
+    <div class="mark">X</div>
+    <h2 id="kiosk-attract-title">Core X</h2>
+    <p>Step closer to begin</p>
+  </div>
+  <video id="kiosk-attract-video" loop muted autoplay playsinline
+         src="/frontend/media/attract.mp4"></video>
+</div>
+
+<div id="kiosk-greeting" class="kiosk-layer">
+  <div class="kiosk-fallback">
+    <div class="mark">X</div>
+    <h2>One moment…</h2>
+    <p>Connecting you now</p>
+  </div>
+  <video id="kiosk-greeting-video" muted playsinline
+         src="/frontend/media/greeting.mp4"></video>
+</div>
 
 <!-- ==================== LOGIN SCREEN ==================== -->
 <div id="login-screen">
@@ -811,7 +921,84 @@
     errorEl.style.display = "none";
   }
 
-  btnStart.addEventListener("click", async () => {
+  // True when the presence controller (not the Start button) drives the room.
+  var kioskMode = false;
+  // Guards the left-meeting handler when WE tear the room down on purpose.
+  var leavingIntentionally = false;
+
+  // Build & join the Daily room for a given URL. Shared by the manual Start
+  // button and the kiosk controller flow (window.ConciergeApp.openRoom).
+  async function openDailyRoom(url) {
+    conversationUrl = url;  // remember for resume
+
+    // Switch to Daily call view
+    welcome.style.display = "none";
+    actions.style.display = "none";
+    cardBody.classList.add("has-iframe");
+
+    // Use Daily JS SDK to join the Tavus conversation
+    dailyCall = window.Daily.createFrame(cardBody, {
+      iframeStyle: {
+        width: "100%",
+        height: kioskMode ? "100vh" : "540px",
+        border: "none",
+      },
+      showLeaveButton: false,
+      showFullscreenButton: false,
+      showParticipantsBar: false,
+    });
+
+    // Listen for tool call events from Tavus CVI
+    dailyCall.on("app-message", function (event) {
+      var msg = event.data;
+      if (!msg) return;
+
+      // Log non-utterance events for debugging
+      if (msg.event_type && msg.event_type !== "conversation.utterance") {
+        console.log("[Daily app-message] event_type:", msg.event_type, msg);
+      }
+
+      // Detect tool call by event_type
+      if (msg.event_type === "conversation.tool_call" || msg.message_type === "tool_call") {
+        console.log("[Tool Call Event]", JSON.stringify(msg, null, 2));
+        handleToolCall(msg);
+        return;
+      }
+
+      // Fallback: check properties for tool-related fields
+      var props = msg.properties || {};
+      if (props.tool_name || props.function_name) {
+        console.log("[Tool Call via properties]", JSON.stringify(msg, null, 2));
+        handleToolCall({
+          function_name: props.tool_name || props.function_name,
+          function_args: props.arguments || props.function_args || {},
+        });
+      }
+    });
+
+    // Room ended (participant/agent left). Notify any listener (kiosk mode
+    // uses this to tell the controller the session is over).
+    dailyCall.on("left-meeting", function () {
+      if (leavingIntentionally) { leavingIntentionally = false; return; }
+      if (typeof window.ConciergeApp.onRoomEnded === "function") {
+        window.ConciergeApp.onRoomEnded();
+      }
+    });
+
+    await dailyCall.join({ url: url });
+
+    if (!kioskMode) {
+      // Show end button below Daily frame (manual mode only)
+      actions.style.display = "flex";
+      actions.style.padding = "1rem 2rem";
+      btnStart.style.display = "none";
+      btnEnd.style.display = "inline-block";
+    }
+
+    setStatus("Active", "active");
+  }
+
+  async function manualStart() {
     clearError();
     btnStart.disabled = true;
     setStatus("Connecting...", "connecting");
@@ -837,66 +1024,15 @@
 
       if (!conversationUrl) throw new Error("No conversation URL returned");
 
-      // Switch to Daily call view
-      welcome.style.display = "none";
-      actions.style.display = "none";
-      cardBody.classList.add("has-iframe");
-
-      // Use Daily JS SDK to join the Tavus conversation
-      dailyCall = window.Daily.createFrame(cardBody, {
-        iframeStyle: {
-          width: "100%",
-          height: "540px",
-          border: "none",
-        },
-        showLeaveButton: false,
-        showFullscreenButton: false,
-        showParticipantsBar: false,
-      });
-
-      // Listen for tool call events from Tavus CVI
-      dailyCall.on("app-message", function (event) {
-        var msg = event.data;
-        if (!msg) return;
-
-        // Log non-utterance events for debugging
-        if (msg.event_type && msg.event_type !== "conversation.utterance") {
-          console.log("[Daily app-message] event_type:", msg.event_type, msg);
-        }
-
-        // Detect tool call by event_type
-        if (msg.event_type === "conversation.tool_call" || msg.message_type === "tool_call") {
-          console.log("[Tool Call Event]", JSON.stringify(msg, null, 2));
-          handleToolCall(msg);
-          return;
-        }
-
-        // Fallback: check properties for tool-related fields
-        var props = msg.properties || {};
-        if (props.tool_name || props.function_name) {
-          console.log("[Tool Call via properties]", JSON.stringify(msg, null, 2));
-          handleToolCall({
-            function_name: props.tool_name || props.function_name,
-            function_args: props.arguments || props.function_args || {},
-          });
-        }
-      });
-
-      await dailyCall.join({ url: conversationUrl });
-
-      // Show end button below Daily frame
-      actions.style.display = "flex";
-      actions.style.padding = "1rem 2rem";
-      btnStart.style.display = "none";
-      btnEnd.style.display = "inline-block";
-
-      setStatus("Active", "active");
+      await openDailyRoom(conversationUrl);
     } catch (err) {
       showError(err.message);
       btnStart.disabled = false;
       setStatus("Error", "");
     }
-  });
+  }
+
+  btnStart.addEventListener("click", manualStart);
 
   function handleToolCall(msg) {
     var props = msg.properties || {};
@@ -1176,6 +1312,7 @@
 
     // End Daily call completely
     if (dailyCall) {
+      leavingIntentionally = true;  // don't echo a room_ended for our own leave
       dailyCall.leave().catch(function () {});
       dailyCall.destroy();
       dailyCall = null;
@@ -1194,7 +1331,44 @@
     conversationUrl = null;  // Clear stored URL
     setStatus("Ready", "");
   }
+
+  /* ========================
+     KIOSK BRIDGE
+     Exposed to kiosk.js so the presence controller can open/close the live
+     Tavus room. In kiosk mode the controller owns the conversation lifecycle,
+     so we never call the backend /end here — we only join/leave the Daily room.
+     ======================== */
+  function kioskTeardown() {
+    if (jitsiApi) { jitsiApi.dispose(); jitsiApi = null; }
+    var jc = document.getElementById("jitsi-container");
+    if (jc) jc.remove();
+    document.getElementById("escalation-banner").classList.remove("visible");
+
+    if (dailyCall) {
+      leavingIntentionally = true;
+      try { dailyCall.leave(); } catch (e) {}
+      try { dailyCall.destroy(); } catch (e) {}
+      dailyCall = null;
+    }
+    cardBody.classList.remove("has-iframe");
+    conversationUrl = null;
+    setStatus("Ready", "");
+  }
+
+  window.ConciergeApp = {
+    // Called by kiosk.js when the controller sends a conversation URL.
+    openRoom: async function (url) {
+      kioskMode = true;
+      conversationId = null;  // controller owns the id + teardown
+      await openDailyRoom(url);
+    },
+    // Called by kiosk.js when the controller returns to attract.
+    closeRoom: kioskTeardown,
+    // kiosk.js sets this to be told when the room ends on the client side.
+    onRoomEnded: null,
+  };
 </script>
+<script src="/frontend/kiosk.js"></script>
 
 </body>
 </html>

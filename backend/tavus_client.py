@@ -57,6 +57,16 @@ async def list_conversations() -> dict:
         return resp.json()
 
 
+async def get_conversation(conversation_id: str) -> dict:
+    """Fetch a single conversation's current status/details."""
+    async with await _client() as client:
+        resp = await client.get(f"/conversations/{conversation_id}")
+        if resp.status_code >= 400:
+            print(f"Tavus API error {resp.status_code}: {resp.text}")
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def patch_persona(persona_id: str, operations: list[dict]) -> dict:
     async with await _client() as client:
         resp = await client.patch(f"/personas/{persona_id}", json=operations)

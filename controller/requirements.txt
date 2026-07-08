@@ -1,0 +1,22 @@
+# Presence controller dependencies.
+# Install into the same venv as the backend:  pip install -r controller/requirements.txt
+#
+# Core (always needed):
+# Pin to the stable OpenCV 4.x line — the 5.0 alpha wheels drop objdetect
+# (Haar CascadeClassifier), which the opencv detector backend relies on.
+opencv-python>=4.8,<5
+numpy
+httpx
+websockets
+PyYAML
+pydantic>=2
+
+# Detector backends — install the one(s) you actually run:
+#   opencv      -> nothing extra (uses opencv-python above, Haar cascade)
+#   mediapipe   -> mediapipe
+#   yolo        -> ultralytics
+#   insightface -> insightface onnxruntime  (onnxruntime-gpu for a GPU box)
+mediapipe
+ultralytics
+insightface
+onnxruntime

@@ -1,0 +1,18 @@
+[Unit]
+Description=Presence-gated Tavus kiosk controller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adjust User and paths for your edge box.
+User=kiosk
+WorkingDirectory=/opt/corex
+Environment=KIOSK_CONFIG=/opt/corex/config.yaml
+ExecStart=/opt/corex/venv/bin/python -m controller.main
+Restart=always
+RestartSec=3
+# An orphaned Tavus room from a crash is still reaped by participant_left_timeout.
+
+[Install]
+WantedBy=multi-user.target

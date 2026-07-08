@@ -1,0 +1,64 @@
+# =============================================================================
+# Presence-Gated Tavus Kiosk — controller configuration
+# Copy to config.yaml and tune on-site. Secrets (TAVUS_API_KEY) live in .env.
+# =============================================================================
+
+# Which property/place this kiosk represents. Set here OR via the PROPERTY_NAME
+# env var (env wins). This is what lets the kiosk run WITHOUT the login screen:
+# the property is fixed by config instead of chosen at a login prompt.
+property:
+  name: "The Meridian"
+  # {property_name} below is substituted with the value above.
+  # Leave conversational_context null to auto-build a sensible default.
+  conversational_context: null
+
+tavus:
+  replica_id: "r1af76e94d00"    # required (falls back to TAVUS_REPLICA_ID env)
+  persona_id: ""                # required (falls back to TAVUS_PERSONA_ID env)
+  # Server-side backstops (seconds):
+  max_call_duration: 600        # hard cap per session
+  participant_left_timeout: 20  # Tavus ends the room this long after everyone leaves
+  participant_absent_timeout: 60
+  enable_recording: false
+  callback_url: null            # OPTIONAL public URL; leave null on a NAT'd kiosk
+
+camera:
+  device_index: 0
+  target_fps: 10                # detection loop fps; 8-10 is plenty
+  frame_width: 640
+  frame_height: 480
+
+detector:
+  backend: "opencv"             # opencv | mediapipe | yolo | insightface
+  min_confidence: 0.6
+  # backend-specific knobs (all optional):
+  yolo_model: "yolov8n.pt"      # ultralytics weights (person detection)
+  insightface_model: "buffalo_l"
+  insightface_ctx_id: -1        # -1 = CPU, >=0 = that GPU index
+
+engagement:
+  min_bbox_height_ratio: 0.18   # face height / frame height => "close enough"
+  max_yaw_degrees: 25           # |head yaw| below this => "facing the screen"
+  arm_debounce_s: 1.5           # engaged this long before ARMING
+  grace_s: 12                   # keep room alive this long after engagement lost
+  smoothing_window: 5           # frames of temporal smoothing on presence signal
+
+prewarm:
+  enabled: false                # v1 off. If true, create the room during ARMING
+                                # using a looser approach threshold.
+  approach_bbox_height_ratio: 0.10
+
+frontend:
+  ws_host: "127.0.0.1"
+  ws_port: 8765
+  attract_video: "media/attract.mp4"
+  greeting_video: "media/greeting.mp4"
+  use_greeting_bridge: true
+  greeting_bridge_ms: 3000      # fallback duration if we can't detect room-joined
+
+tavus_poll:
+  interval_s: 15                # GET conversation status while ACTIVE/GRACE
+
+logging:
+  level: "INFO"
+  session_metrics: true         # log session start/end + billed duration estimate
