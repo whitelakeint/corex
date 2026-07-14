@@ -9,9 +9,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://meet.whitelakedigital.com/external_api.js"></script>
   <script src="/frontend/daily-iframe.js"></script>
-  <!-- TensorFlow.js for face detection -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.0.7"></script>
+  <!-- TensorFlow.js + BlazeFace for face detection (self-hosted for offline kiosk) -->
+  <script src="/frontend/vendor/tfjs-4.10.0.min.js"></script>
+  <script src="/frontend/vendor/blazeface-0.0.7.js"></script>
   <style>
     :root {
       --primary: #1a3a5c;
@@ -592,9 +592,51 @@
               object-fit: cover; z-index: 0; transition: opacity 0.5s ease;">
 </video>
 
+<!-- Startup loader: masks camera + model initialization so the demo never looks
+     "live" (attract video showing) before presence detection is actually armed.
+     Visible by default; JS hides it once the kiosk is ready. -->
+<style>
+  #startup-loader {
+    position: fixed; inset: 0; z-index: 2500;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #0d1b2a 0%, #132d46 100%);
+    color: #e8e4dc; text-align: center;
+    font-family: "DM Sans", "Segoe UI", system-ui, sans-serif;
+    transition: opacity 0.6s ease;
+  }
+  #startup-loader.hidden { opacity: 0; pointer-events: none; }
+  #startup-loader .sl-mark {
+    width: 72px; height: 72px; margin-bottom: 1.75rem;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid #c9a96e; border-radius: 50%;
+    font-family: "Playfair Display", Georgia, serif; font-size: 2rem; font-weight: 700;
+    color: #c9a96e;
+  }
+  #startup-loader .sl-spinner {
+    width: 40px; height: 40px; margin-bottom: 1.5rem;
+    border: 3px solid rgba(201, 169, 110, 0.2); border-top-color: #c9a96e;
+    border-radius: 50%; animation: sl-spin 0.9s linear infinite;
+  }
+  @keyframes sl-spin { to { transform: rotate(360deg); } }
+  #startup-loader h2 {
+    font-family: "Playfair Display", Georgia, serif; font-weight: 600;
+    font-size: 1.5rem; letter-spacing: 0.04em; margin-bottom: 0.6rem;
+  }
+  #startup-loader p {
+    font-size: 0.78rem; letter-spacing: 0.22em; text-transform: uppercase;
+    color: rgba(232, 228, 220, 0.5);
+  }
+</style>
+<div id="startup-loader">
+  <div class="sl-mark">X</div>
+  <div class="sl-spinner"></div>
+  <h2>Preparing the concierge</h2>
+  <p id="startup-loader-status">Starting up…</p>
+</div>
+
 <!-- Error overlay for camera/connection issues -->
 <div id="error-overlay" style="display: none; position: fixed; inset: 0; z-index: 2000;
-     background: rgba(0, 0, 0, 0.9); display: flex; align-items: center; justify-content: center;">
+     background: rgba(0, 0, 0, 0.9); align-items: center; justify-content: center;">
   <div style="text-align: center; color: white; padding: 2rem;">
     <h2 id="error-title" style="margin-bottom: 1rem;">Error</h2>
     <p id="error-message" style="margin-bottom: 2rem;">Something went wrong</p>
@@ -669,7 +711,7 @@
     </div>
   </header>
 
-  <main>
+  <!-- <main>
     <div class="card">
       <div class="card-header">
         <h2>Lobby Concierge</h2>
@@ -683,21 +725,19 @@
         <p class="reason" id="escalation-reason"></p>
       </div>
       <div class="card-body" id="card-body">
-        <div class="welcome-text" id="welcome">
-          <h3>Welcome to Core X</h3>
-          <p>
-            Our virtual concierge can help you with visitor check-in, building
-            directions, leasing inquiries, package drop-offs, and more.
-          </p>
-        </div>
-        <div class="actions" id="actions">
+        <!-- Welcome copy + manual Start/End buttons removed: the kiosk is
+             presence-driven, so there's nothing for the visitor to click. The
+             element shells are kept (hidden) so legacy JS references that grab
+             them by id at load time stay valid. The live Tavus room mounts here. -->
+        <div class="welcome-text" id="welcome" style="display:none"></div>
+        <div class="actions" id="actions" style="display:none">
           <button id="btn-start">Start Conversation</button>
           <button id="btn-end">End Conversation</button>
         </div>
         <p class="error-msg" id="error" style="display:none"></p>
       </div>
     </div>
-  </main>
+  </main> -->
 
   <footer>Powered by Tavus CVI</footer>
 </div>
@@ -875,20 +915,21 @@
   const errorEl = document.getElementById("error");
 
   function setStatus(label, state) {
-    statusDot.className = state || "";
-    statusLabel.textContent = label;
+    if (statusDot) statusDot.className = state || "";
+    if (statusLabel) statusLabel.textContent = label;
   }
 
   function showError(msg) {
+    if (!errorEl) return;
     errorEl.textContent = msg;
     errorEl.style.display = "block";
   }
 
   function clearError() {
-    errorEl.style.display = "none";
+    if (errorEl) errorEl.style.display = "none";
   }
 
-  btnStart.addEventListener("click", async () => {
+  if (btnStart) btnStart.addEventListener("click", async () => {
     clearError();
     btnStart.disabled = true;
     setStatus("Connecting...", "connecting");
@@ -1023,7 +1064,7 @@
     }
   }
 
-  btnEnd.addEventListener("click", async () => {
+  if (btnEnd) btnEnd.addEventListener("click", async () => {
     btnEnd.disabled = true;
     setStatus("Ending...", "connecting");
 
@@ -1333,9 +1374,10 @@
     loginScreen.style.display = 'none';
     appScreen.classList.add('visible');
 
-    // Hide start/end buttons (auto-controlled now)
-    btnStart.style.display = 'none';
-    btnEnd.style.display = 'none';
+    // Hide start/end buttons (auto-controlled now) — may be absent if the card
+    // markup was removed.
+    if (btnStart) btnStart.style.display = 'none';
+    if (btnEnd) btnEnd.style.display = 'none';
 
     // Initialize face detector
     faceDetector = new FaceDetectionManager({
@@ -1346,6 +1388,7 @@
     });
 
     // Initialize camera
+    updateStartupStatus('Requesting camera…');
     const cameraOk = await faceDetector.initCamera();
     if (!cameraOk) {
       showErrorOverlay('Camera Access Required',
@@ -1354,6 +1397,7 @@
     }
 
     // Load face detection model
+    updateStartupStatus('Loading assistant…');
     const modelOk = await faceDetector.loadModel();
     if (!modelOk) {
       showErrorOverlay('Model Loading Failed',
@@ -1388,53 +1432,74 @@
     console.log('[Kiosk] Daily.js:', window.Daily ? 'OK' : 'MISSING');
     console.log('[Kiosk] Username:', kioskUsername);
     updateDebugState('IDLE');
+
+    // Everything is armed — reveal the live attract screen.
+    updateStartupStatus('Ready');
+    hideStartupLoader();
   }
 
   /**
-   * Handle state changes
+   * Always returns a valid conversation mount. If the card markup (#card-body)
+   * was removed — the kiosk idle screen is just the attract video — this creates
+   * a fullscreen mount on the fly so the Tavus/Daily room still has somewhere to
+   * render and nothing null-crashes.
+   */
+  function getConversationMount() {
+    let el = document.getElementById('card-body');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'card-body';
+      el.className = 'card-body';
+      el.style.cssText =
+        'position:fixed; inset:0; z-index:5; opacity:0; transition:opacity 0.5s ease;';
+      document.body.appendChild(el);
+      console.log('[Kiosk] Created fallback fullscreen #card-body mount');
+    }
+    return el;
+  }
+
+  /**
+   * Handle state changes. All DOM lookups are null-safe so a removed element can
+   * never throw mid-transition (which previously wedged the state machine in
+   * STARTING_CONVERSATION because onStateEnter never ran).
    */
   function onStateChange(newState, oldState) {
     console.log(`[Kiosk] State changed: ${oldState} → ${newState}`);
     updateDebugState(newState);
 
-    // Update UI based on state
     const bgVideo = document.getElementById('background-video');
-    const appScreen = document.getElementById('app-screen');
-    const cardBody = document.getElementById('card-body');
+    const cardBody = getConversationMount();  // never null
+    const showVideo = (show) => { if (bgVideo) bgVideo.style.display = show ? 'block' : 'none'; };
+    const fadeVideo = (o) => { if (bgVideo) bgVideo.style.opacity = o; };
 
     switch (newState) {
       case 'IDLE':
-        // Show background video, hide app
-        bgVideo.style.display = 'block';
-        bgVideo.style.opacity = '1';
+        showVideo(true);
+        fadeVideo('1');
         cardBody.style.opacity = '0';
-        faceDetector.setDetectionMode('idle');
+        // Re-acquire the camera (released while Daily had the call) and resume
+        // presence detection. No-op if we still hold the camera.
+        if (faceDetector) {
+          faceDetector.resumeCamera('idle').catch(err =>
+            console.error('[Kiosk] Failed to resume camera:', err));
+        }
         break;
 
       case 'STARTING_CONVERSATION':
-        // Fade out background video, prepare app screen
-        bgVideo.style.opacity = '0';
+        fadeVideo('0');
         cardBody.style.opacity = '0';
-        setTimeout(() => {
-          bgVideo.style.display = 'none';
-        }, 500);
+        setTimeout(() => showVideo(false), 500);
         break;
 
       case 'CONVERSATION_ACTIVE':
-        // Show conversation, hide background
-        bgVideo.style.display = 'none';
+        showVideo(false);
         cardBody.style.opacity = '1';
         cardBody.style.transition = 'opacity 0.5s ease-in';
-        faceDetector.setDetectionMode('active');
+        if (faceDetector) faceDetector.setDetectionMode('active');
         break;
 
       case 'ENDING_CONVERSATION':
-        // Fade out conversation
-        cardBody.style.opacity = '0';
-        break;
-
       case 'ERROR_RECOVERY':
-        // Show error briefly, hide conversation
         cardBody.style.opacity = '0';
         break;
     }
@@ -1445,6 +1510,10 @@
    */
   async function startConversationAuto() {
     console.log('[Kiosk] Auto-starting conversation...');
+
+    // Track a conversation created in THIS attempt so we can end it if the join
+    // fails — otherwise orphaned Tavus rooms pile up into a 503 concurrency cap.
+    let createdConversationId = null;
 
     try {
       console.log('[Kiosk] Step 1: Fetching conversation from API...');
@@ -1474,6 +1543,7 @@
       const data = await response.json();
       conversationId = data.conversation_id;
       conversationUrl = data.conversation_url;
+      createdConversationId = conversationId;
 
       console.log('[Kiosk] Step 3: Conversation created:', conversationId);
       console.log('[Kiosk] Step 4: Conversation URL:', conversationUrl);
@@ -1484,12 +1554,9 @@
       }
       console.log('[Kiosk] Step 5: Daily.js library confirmed loaded');
 
-      // Create Daily.js iframe
-      const cardBody = document.getElementById('card-body');
-      if (!cardBody) {
-        throw new Error('card-body element not found');
-      }
-      console.log('[Kiosk] Step 6: card-body element found');
+      // Create Daily.js iframe (mount self-heals if the card markup was removed)
+      const cardBody = getConversationMount();
+      console.log('[Kiosk] Step 6: conversation mount ready');
 
       // Destroy any existing Daily frame before creating a new one
       if (dailyCall) {
@@ -1500,6 +1567,13 @@
           console.warn('[Kiosk] Error destroying existing frame:', e);
         }
         dailyCall = null;
+      }
+
+      // Hand the camera to Daily BEFORE it joins. The face detector holds the
+      // webcam via getUserMedia; if we don't release it first, Daily contends
+      // for the same device and the join hangs (~30s) then times out.
+      if (faceDetector) {
+        faceDetector.releaseCamera();
       }
 
       dailyCall = window.Daily.createFrame(cardBody, {
@@ -1513,6 +1587,15 @@
       // Listen for tool calls
       dailyCall.on('app-message', handleToolCall);
       console.log('[Kiosk] Step 8: Tool call listener attached');
+
+      // If the room ends on its own (visitor walks away -> Tavus absent/duration
+      // timeout, or the replica leaves), return to idle and free the camera.
+      dailyCall.on('left-meeting', () => {
+        console.log('[Kiosk] Daily left-meeting — session ended remotely');
+        if (stateMachine && stateMachine.getState() === 'CONVERSATION_ACTIVE') {
+          stateMachine.setState('ENDING_CONVERSATION');
+        }
+      });
 
       // Wait for joined-meeting event instead of relying on join() promise
       console.log('[Kiosk] Step 9: Attempting to join conversation...');
@@ -1556,6 +1639,27 @@
       console.error('[Kiosk] Error name:', error.name);
       console.error('[Kiosk] Error message:', error.message);
       console.error('[Kiosk] Full error:', error);
+
+      // Tear down a half-open room so failed attempts don't accumulate into a
+      // Tavus concurrency 503. (Camera is re-acquired by the IDLE state handler.)
+      try {
+        if (dailyCall) {
+          await dailyCall.leave().catch(() => {});
+          await dailyCall.destroy().catch(() => {});
+          dailyCall = null;
+        }
+      } catch (e) {
+        console.warn('[Kiosk] Cleanup: Daily teardown failed:', e);
+      }
+      if (createdConversationId) {
+        try {
+          await fetch(`${API_BASE}/api/conversations/${createdConversationId}/end`, { method: 'POST' });
+          console.log('[Kiosk] Cleanup: ended orphaned conversation', createdConversationId);
+        } catch (e) {
+          console.warn('[Kiosk] Cleanup: failed to end conversation:', e);
+        }
+      }
+      conversationId = null;
 
       if (error.name === 'AbortError') {
         showErrorOverlay('Connection Timeout', 'Failed to connect to Tavus API. Returning to idle...');
@@ -1610,7 +1714,25 @@
   /**
    * Show error overlay
    */
+  /**
+   * Startup loader controls (covers the screen during camera + model init).
+   */
+  function updateStartupStatus(msg) {
+    const el = document.getElementById('startup-loader-status');
+    if (el && msg) el.textContent = msg;
+  }
+
+  function hideStartupLoader() {
+    const sl = document.getElementById('startup-loader');
+    if (!sl) return;
+    sl.classList.add('hidden');
+    setTimeout(() => { sl.style.display = 'none'; }, 650);
+  }
+
   function showErrorOverlay(title, message) {
+    // An error supersedes the startup loader — make sure it's not covering it.
+    hideStartupLoader();
+
     const overlay = document.getElementById('error-overlay');
     const titleEl = document.getElementById('error-title');
     const messageEl = document.getElementById('error-message');

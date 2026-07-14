@@ -1,0 +1,9 @@
+# Windows batch files must use CRLF or cmd.exe mis-parses them.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Shell scripts must stay LF (they run on the Linux server).
+*.sh text eol=lf
+
+# Model weights + other binaries must never be EOL-normalized.
+*.bin binary

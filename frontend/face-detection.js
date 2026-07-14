@@ -34,14 +34,21 @@ class FaceDetectionManager {
     try {
       console.log('[FaceDetection] Requesting camera access...');
 
+      // Request the mic too — NOT for detection, but to secure microphone
+      // permission up front (during the loader). Otherwise the Tavus/Daily call
+      // triggers its own mic prompt mid-join, and an unanswered prompt makes the
+      // join hang for 30s and time out. We stop the audio track immediately so
+      // the device isn't held; only the granted permission persists.
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 1280 },
           height: { ideal: 720 },
           facingMode: 'user'
         },
-        audio: false
+        audio: true
       });
+
+      stream.getAudioTracks().forEach(track => track.stop());
 
       this.cameraStream = stream;
 
@@ -85,8 +92,18 @@ class FaceDetectionManager {
       await tf.setBackend('webgl');
       await tf.ready();
 
-      // Load BlazeFace model
-      this.model = await blazeface.load();
+      // Load BlazeFace model from a SELF-HOSTED, same-origin copy. The library
+      // default fetches from tfhub.dev, which now 302-redirects to a Kaggle
+      // signed URL whose signature only covers model.json (not the weights) —
+      // so the weight fetch 403s and the browser reports "NetworkError". Serving
+      // the model ourselves fixes that and also lets the kiosk run offline.
+      const LOCAL_MODEL_URL = '/frontend/models/blazeface/model.json';
+      try {
+        this.model = await blazeface.load({ modelUrl: LOCAL_MODEL_URL });
+      } catch (localErr) {
+        console.warn('[FaceDetection] Local model load failed, falling back to default host:', localErr);
+        this.model = await blazeface.load();
+      }
 
       // Warm up model with dummy inference
       await this.warmUpModel();
@@ -146,6 +163,45 @@ class FaceDetectionManager {
   setDetectionMode(mode) {
     this.currentFps = mode === 'idle' ? this.config.idleFps : this.config.activeFps;
     console.log(`[FaceDetection] Detection mode set to ${mode} (${this.currentFps} FPS)`);
+  }
+
+  /**
+   * Release the camera device so another consumer (the Daily/Tavus call) can
+   * use it, WITHOUT tearing down the loaded model. Detection is paused and the
+   * current callback is remembered so resumeCamera() can restart cleanly.
+   *
+   * A single webcam can't be reliably opened by the face detector AND Daily at
+   * the same time — leaving it held makes Daily's getUserMedia hang (~30s
+   * "enumerateDevices took exceptionally long") and the join times out.
+   */
+  releaseCamera() {
+    this._savedCallback = this.detectionCallback || this._savedCallback || null;
+    this.stopDetection();
+    if (this.cameraStream) {
+      this.cameraStream.getTracks().forEach(track => track.stop());
+      this.cameraStream = null;
+    }
+    if (this.videoElement) {
+      this.videoElement.srcObject = null;
+    }
+    console.log('[FaceDetection] Camera released (handed off to the call)');
+  }
+
+  /**
+   * Re-acquire the camera and resume detection with the remembered callback.
+   * No-op if the camera is already held.
+   * @param {string} mode - 'idle' | 'active'
+   * @returns {Promise<boolean>} success
+   */
+  async resumeCamera(mode = 'idle') {
+    if (this.cameraStream) return true; // still holding it
+    const ok = await this.initCamera();
+    if (!ok) return false;
+    if (this._savedCallback) {
+      this.startDetection(this._savedCallback, mode);
+    }
+    console.log('[FaceDetection] Camera resumed');
+    return true;
   }
 
   /**
@@ -258,7 +314,17 @@ class FaceDetectionManager {
     }
 
     if (this.model) {
-      this.model.dispose();
+      // BlazeFace's returned object has no top-level dispose(); the disposable
+      // tf.GraphModel is nested as `blazeFaceModel`. Guard so cleanup never throws.
+      try {
+        if (typeof this.model.dispose === 'function') {
+          this.model.dispose();
+        } else if (this.model.blazeFaceModel && typeof this.model.blazeFaceModel.dispose === 'function') {
+          this.model.blazeFaceModel.dispose();
+        }
+      } catch (e) {
+        console.warn('[FaceDetection] Model dispose skipped:', e);
+      }
       this.model = null;
     }
 
