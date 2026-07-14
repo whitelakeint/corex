@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import desc, asc
 from sqlalchemy.exc import IntegrityError
+import httpx
 
 from backend import tavus_client, tool_stubs
 from backend.config import BACKEND_URL, TAVUS_PERSONA_ID, ADMIN_USERNAME, ADMIN_PASSWORD, USERS
@@ -169,6 +170,39 @@ async def admin_kb_page():
 app.mount("/frontend", StaticFiles(directory=str(FRONTEND_DIR)), name="frontend")
 
 
+# Serve meridian_video.mp4 from project root
+@app.get("/meridian_video.mp4")
+async def serve_video():
+    """Serve the background video file."""
+    video_path = Path(__file__).resolve().parent.parent / "meridian_video.mp4"
+    if not video_path.exists():
+        logger.error("meridian_video.mp4 not found")
+        return Response(status_code=404)
+    return FileResponse(video_path, media_type="video/mp4")
+
+
+# ---------------------------------------------------------------------------
+# Kiosk Configuration
+# ---------------------------------------------------------------------------
+@app.get("/api/kiosk/config")
+async def get_kiosk_config():
+    """Return face detection configuration for kiosk mode."""
+    import os
+    return {
+        "face_detection": {
+            "enabled": os.getenv("FACE_DETECTION_ENABLED", "true") == "true",
+            "threshold": float(os.getenv("FACE_DETECTION_THRESHOLD", "0.75")),
+            "start_delay_seconds": float(os.getenv("FACE_START_DELAY", "1.5")),
+            "end_delay_seconds": float(os.getenv("FACE_END_DELAY", "10")),
+            "min_face_size": float(os.getenv("MIN_FACE_SIZE", "0.15"))
+        },
+        "background_video": {
+            "url": "/meridian_video.mp4",
+            "fallback_enabled": True
+        }
+    }
+
+
 # ---------------------------------------------------------------------------
 # Conversation lifecycle
 # ---------------------------------------------------------------------------
@@ -202,20 +236,55 @@ async def create_conversation(request: Request):
             content={"error": f"Persona not configured for {username}. Run setup_persona.py with --user {username}"}
         )
 
-    data = await tavus_client.create_conversation(
-        persona_id=persona_id,
-        custom_greeting="Hello! How may I help you?",
-        properties={
-            "max_call_duration": 600,
-            "participant_left_timeout": 30,
-            "participant_absent_timeout": 120,
-            "enable_recording": True,
-            "enable_transcription": True,
-            "enable_closed_captions": True,
-            "apply_greenscreen": False,
-        },
-        callback_url=f"{BACKEND_URL}/webhooks/tavus",
-    )
+    try:
+        data = await tavus_client.create_conversation(
+            persona_id=persona_id,
+            custom_greeting="Hello! How may I help you?",
+            properties={
+                "max_call_duration": 600,
+                "participant_left_timeout": 30,
+                "participant_absent_timeout": 120,
+                "enable_recording": True,
+                "enable_transcription": True,
+                "enable_closed_captions": True,
+                "apply_greenscreen": False,
+            },
+            callback_url=f"{BACKEND_URL}/webhooks/tavus",
+        )
+    except httpx.HTTPStatusError as e:
+        error_msg = str(e)
+        logger.error(f"Failed to create conversation: {error_msg}")
+
+        # Extract response body from httpx exception
+        response_text = ""
+        try:
+            response_text = e.response.text
+        except:
+            pass
+
+        # Check if it's the concurrent conversations limit
+        if "maximum concurrent conversations" in response_text.lower():
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "Service temporarily unavailable",
+                    "message": "Maximum concurrent conversations reached. Please try again in a few moments.",
+                    "retry_after": 30
+                }
+            )
+
+        # Generic error
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to create conversation: {error_msg}"}
+        )
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"Failed to create conversation (unexpected): {error_msg}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to create conversation: {error_msg}"}
+        )
 
     conversation_id = data.get("conversation_id")
     conversation_url = data.get("conversation_url")

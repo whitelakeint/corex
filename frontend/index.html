@@ -9,6 +9,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://meet.whitelakedigital.com/external_api.js"></script>
   <script src="/frontend/daily-iframe.js"></script>
+  <!-- TensorFlow.js for face detection -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.0.7"></script>
   <style>
     :root {
       --primary: #1a3a5c;
@@ -575,6 +578,43 @@
   </style>
 </head>
 <body>
+
+<!-- ==================== FACE DETECTION & BACKGROUND VIDEO ==================== -->
+<!-- Hidden camera feed for face detection -->
+<video id="camera-feed" autoplay playsinline muted style="display: none;"></video>
+<canvas id="detection-canvas" style="display: none;"></canvas>
+
+<!-- Background video (visible when IDLE) -->
+<video id="background-video"
+       src="/meridian_video.mp4"
+       autoplay loop muted playsinline
+       style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+              object-fit: cover; z-index: 0; transition: opacity 0.5s ease;">
+</video>
+
+<!-- Error overlay for camera/connection issues -->
+<div id="error-overlay" style="display: none; position: fixed; inset: 0; z-index: 2000;
+     background: rgba(0, 0, 0, 0.9); display: flex; align-items: center; justify-content: center;">
+  <div style="text-align: center; color: white; padding: 2rem;">
+    <h2 id="error-title" style="margin-bottom: 1rem;">Error</h2>
+    <p id="error-message" style="margin-bottom: 2rem;">Something went wrong</p>
+    <button id="error-reload-btn" onclick="location.reload()"
+            style="padding: 0.75rem 2rem; background: var(--accent); border: none;
+                   border-radius: 4px; color: white; font-size: 1rem; cursor: pointer;">
+      Reload
+    </button>
+  </div>
+</div>
+
+<!-- Debug panel (can be hidden in production) -->
+<div id="debug-panel" style="position: fixed; top: 10px; right: 10px; z-index: 3000;
+     background: rgba(0, 0, 0, 0.8); color: white; padding: 1rem; border-radius: 8px;
+     font-family: monospace; font-size: 12px; min-width: 200px;">
+  <div><strong>State:</strong> <span id="debug-state">LOADING</span></div>
+  <div><strong>Faces:</strong> <span id="debug-faces">0</span></div>
+  <div><strong>Timer:</strong> <span id="debug-timer">-</span></div>
+  <div><strong>FPS:</strong> <span id="debug-fps">-</span></div>
+</div>
 
 <!-- ==================== LOGIN SCREEN ==================== -->
 <div id="login-screen">
@@ -1245,6 +1285,389 @@
     conversationUrl = null;  // Clear stored URL
     setStatus("Ready", "");
   }
+</script>
+
+<!-- Face Detection and State Machine Modules -->
+<script src="/frontend/face-detection.js"></script>
+<script src="/frontend/state-machine.js"></script>
+
+<!-- Kiosk Mode Initialization -->
+<script>
+  /* ========================
+     KIOSK MODE - AUTO-START CONVERSATION
+     ======================== */
+
+  // Global instances
+  let faceDetector = null;
+  let stateMachine = null;
+  let kioskUsername = null;
+
+  // Debug panel update interval
+  let debugInterval = null;
+
+  /**
+   * Initialize kiosk mode on page load
+   */
+  async function initKioskMode() {
+    console.log('[Kiosk] Initializing kiosk mode...');
+
+    // Extract building from URL parameter
+    const urlParams = new URLSearchParams(window.location.search);
+    const buildingParam = urlParams.get('building') || 'meridian';
+
+    // Map building to username
+    const BUILDING_MAP = {
+      'meridian': 'admin',
+      'buildingB': 'buildingB'
+    };
+
+    kioskUsername = BUILDING_MAP[buildingParam] || 'admin';
+    console.log(`[Kiosk] Building: ${buildingParam}, Username: ${kioskUsername}`);
+
+    // Auto-create session (skip login)
+    const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString();
+    document.cookie = `concierge_session=1; expires=${expires}; path=/; SameSite=Strict`;
+    sessionStorage.setItem('currentUser', kioskUsername);
+
+    // Hide login screen, show app
+    loginScreen.style.display = 'none';
+    appScreen.classList.add('visible');
+
+    // Hide start/end buttons (auto-controlled now)
+    btnStart.style.display = 'none';
+    btnEnd.style.display = 'none';
+
+    // Initialize face detector
+    faceDetector = new FaceDetectionManager({
+      minConfidence: 0.75,
+      minFaceSize: 0.15,
+      idleFps: 5,
+      activeFps: 2
+    });
+
+    // Initialize camera
+    const cameraOk = await faceDetector.initCamera();
+    if (!cameraOk) {
+      showErrorOverlay('Camera Access Required',
+        'This kiosk needs camera access to detect your presence. Please allow camera access and reload.');
+      return;
+    }
+
+    // Load face detection model
+    const modelOk = await faceDetector.loadModel();
+    if (!modelOk) {
+      showErrorOverlay('Model Loading Failed',
+        'Failed to load face detection model. Please check your connection and reload.');
+      return;
+    }
+
+    // Initialize state machine
+    stateMachine = new ConversationStateMachine({
+      faceDetectedDelay: 1500,  // 1.5 seconds
+      faceGoneDelay: 10000,      // 10 seconds
+      errorRecoveryDelay: 5000   // 5 seconds
+    });
+
+    // Set up state machine callbacks
+    stateMachine.setStateChangeCallback(onStateChange);
+    stateMachine.setStartConversationCallback(startConversationAuto);
+    stateMachine.setEndConversationCallback(endConversationAuto);
+
+    // Start face detection
+    faceDetector.startDetection((facePresent, faceCount) => {
+      stateMachine.handleFaceDetection(facePresent, faceCount);
+      updateDebugPanel(facePresent, faceCount);
+    }, 'idle');
+
+    // Start debug panel updates
+    debugInterval = setInterval(updateDebugPanelTimer, 100);
+
+    console.log('[Kiosk] Initialization complete - ready for face detection');
+    console.log('[Kiosk] Face detector:', faceDetector ? 'OK' : 'MISSING');
+    console.log('[Kiosk] State machine:', stateMachine ? 'OK' : 'MISSING');
+    console.log('[Kiosk] Daily.js:', window.Daily ? 'OK' : 'MISSING');
+    console.log('[Kiosk] Username:', kioskUsername);
+    updateDebugState('IDLE');
+  }
+
+  /**
+   * Handle state changes
+   */
+  function onStateChange(newState, oldState) {
+    console.log(`[Kiosk] State changed: ${oldState} → ${newState}`);
+    updateDebugState(newState);
+
+    // Update UI based on state
+    const bgVideo = document.getElementById('background-video');
+    const appScreen = document.getElementById('app-screen');
+    const cardBody = document.getElementById('card-body');
+
+    switch (newState) {
+      case 'IDLE':
+        // Show background video, hide app
+        bgVideo.style.display = 'block';
+        bgVideo.style.opacity = '1';
+        cardBody.style.opacity = '0';
+        faceDetector.setDetectionMode('idle');
+        break;
+
+      case 'STARTING_CONVERSATION':
+        // Fade out background video, prepare app screen
+        bgVideo.style.opacity = '0';
+        cardBody.style.opacity = '0';
+        setTimeout(() => {
+          bgVideo.style.display = 'none';
+        }, 500);
+        break;
+
+      case 'CONVERSATION_ACTIVE':
+        // Show conversation, hide background
+        bgVideo.style.display = 'none';
+        cardBody.style.opacity = '1';
+        cardBody.style.transition = 'opacity 0.5s ease-in';
+        faceDetector.setDetectionMode('active');
+        break;
+
+      case 'ENDING_CONVERSATION':
+        // Fade out conversation
+        cardBody.style.opacity = '0';
+        break;
+
+      case 'ERROR_RECOVERY':
+        // Show error briefly, hide conversation
+        cardBody.style.opacity = '0';
+        break;
+    }
+  }
+
+  /**
+   * Start conversation automatically (called by state machine)
+   */
+  async function startConversationAuto() {
+    console.log('[Kiosk] Auto-starting conversation...');
+
+    try {
+      console.log('[Kiosk] Step 1: Fetching conversation from API...');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const response = await fetch(`${API_BASE}/api/conversations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: kioskUsername }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+      console.log('[Kiosk] Step 2: API response received, status:', response.status);
+
+      if (!response.ok) {
+        // Handle 503 service unavailable (concurrent limit reached)
+        if (response.status === 503) {
+          const errorData = await response.json().catch(() => ({}));
+          const retryAfter = errorData.retry_after || 30;
+          throw new Error(`SERVICE_UNAVAILABLE:${retryAfter}`);
+        }
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      conversationId = data.conversation_id;
+      conversationUrl = data.conversation_url;
+
+      console.log('[Kiosk] Step 3: Conversation created:', conversationId);
+      console.log('[Kiosk] Step 4: Conversation URL:', conversationUrl);
+
+      // Check if Daily is loaded
+      if (!window.Daily) {
+        throw new Error('Daily.js library not loaded');
+      }
+      console.log('[Kiosk] Step 5: Daily.js library confirmed loaded');
+
+      // Create Daily.js iframe
+      const cardBody = document.getElementById('card-body');
+      if (!cardBody) {
+        throw new Error('card-body element not found');
+      }
+      console.log('[Kiosk] Step 6: card-body element found');
+
+      // Destroy any existing Daily frame before creating a new one
+      if (dailyCall) {
+        console.log('[Kiosk] Step 6.5: Cleaning up existing Daily frame');
+        try {
+          await dailyCall.destroy();
+        } catch (e) {
+          console.warn('[Kiosk] Error destroying existing frame:', e);
+        }
+        dailyCall = null;
+      }
+
+      dailyCall = window.Daily.createFrame(cardBody, {
+        iframeStyle: { width: '100%', height: '800px', border: 'none' },
+        showLeaveButton: false,
+        showFullscreenButton: false,
+        showParticipantsBar: false
+      });
+      console.log('[Kiosk] Step 7: Daily frame created');
+
+      // Listen for tool calls
+      dailyCall.on('app-message', handleToolCall);
+      console.log('[Kiosk] Step 8: Tool call listener attached');
+
+      // Wait for joined-meeting event instead of relying on join() promise
+      console.log('[Kiosk] Step 9: Attempting to join conversation...');
+
+      const joinedPromise = new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          dailyCall.off('joined-meeting', onJoined);
+          dailyCall.off('error', onError);
+          reject(new Error('Join timeout after 30 seconds'));
+        }, 30000);
+
+        const onJoined = (event) => {
+          clearTimeout(timeout);
+          dailyCall.off('error', onError);
+          console.log('[Kiosk] joined-meeting event received:', event);
+          resolve(event);
+        };
+
+        const onError = (error) => {
+          clearTimeout(timeout);
+          dailyCall.off('joined-meeting', onJoined);
+          console.error('[Kiosk] Daily.js error event:', error);
+          reject(error);
+        };
+
+        dailyCall.on('joined-meeting', onJoined);
+        dailyCall.on('error', onError);
+
+        // Start the join
+        dailyCall.join({ url: conversationUrl }).catch(reject);
+      });
+
+      await joinedPromise;
+      console.log('[Kiosk] Step 10: Successfully joined conversation!');
+      setStatus('Active', 'active');
+
+      return conversationId;
+
+    } catch (error) {
+      console.error('[Kiosk] Failed at step, error:', error);
+      console.error('[Kiosk] Error name:', error.name);
+      console.error('[Kiosk] Error message:', error.message);
+      console.error('[Kiosk] Full error:', error);
+
+      if (error.name === 'AbortError') {
+        showErrorOverlay('Connection Timeout', 'Failed to connect to Tavus API. Returning to idle...');
+      } else if (error.message && error.message.startsWith('SERVICE_UNAVAILABLE:')) {
+        // Extract retry_after seconds from error message
+        const retryAfter = parseInt(error.message.split(':')[1]) || 30;
+        console.log(`[Kiosk] Service unavailable, will retry after ${retryAfter}s`);
+
+        // Return error with retry info instead of showing overlay
+        const retryError = new Error('Service temporarily unavailable');
+        retryError.retryAfter = retryAfter;
+        throw retryError;
+      } else {
+        showErrorOverlay('Connection Failed', `${error.message || 'Unknown error'}\n\nCheck browser console (F12) for details.`);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * End conversation automatically (called by state machine)
+   */
+  async function endConversationAuto(convId) {
+    console.log('[Kiosk] Auto-ending conversation:', convId);
+
+    try {
+      // Call backend to end conversation
+      await fetch(`${API_BASE}/api/conversations/${convId}/end`, {
+        method: 'POST'
+      });
+
+      // Clean up Daily call
+      if (dailyCall) {
+        await dailyCall.leave().catch(() => {});
+        dailyCall.destroy();
+        dailyCall = null;
+      }
+
+      // Reset UI
+      setStatus('Ready', '');
+      conversationId = null;
+      conversationUrl = null;
+
+      console.log('[Kiosk] Conversation ended successfully');
+
+    } catch (error) {
+      console.error('[Kiosk] Error ending conversation:', error);
+      // Don't throw - always return to IDLE even if cleanup fails
+    }
+  }
+
+  /**
+   * Show error overlay
+   */
+  function showErrorOverlay(title, message) {
+    const overlay = document.getElementById('error-overlay');
+    const titleEl = document.getElementById('error-title');
+    const messageEl = document.getElementById('error-message');
+
+    titleEl.textContent = title;
+    messageEl.textContent = message;
+    overlay.style.display = 'flex';
+
+    // Auto-hide after 5 seconds for non-critical errors
+    if (!title.includes('Required') && !title.includes('Access')) {
+      setTimeout(() => {
+        overlay.style.display = 'none';
+      }, 5000);
+    }
+  }
+
+  /**
+   * Update debug panel
+   */
+  function updateDebugPanel(facePresent, faceCount) {
+    document.getElementById('debug-faces').textContent = faceCount;
+    const avgInference = faceDetector ? Math.round(faceDetector.getAverageInferenceTime()) : 0;
+    document.getElementById('debug-fps').textContent = `${avgInference}ms`;
+  }
+
+  function updateDebugState(state) {
+    document.getElementById('debug-state').textContent = state;
+  }
+
+  function updateDebugPanelTimer() {
+    if (!stateMachine) return;
+    const status = stateMachine.getTimerStatus();
+
+    let timerText = '-';
+    if (status.faceDetectedTimer !== null) {
+      timerText = `Start: ${Math.round(status.faceDetectedTimer)}ms`;
+    } else if (status.faceGoneTimer !== null) {
+      timerText = `End: ${Math.round(status.faceGoneTimer)}ms`;
+    }
+
+    document.getElementById('debug-timer').textContent = timerText;
+  }
+
+  // Initialize kiosk mode when page loads
+  window.addEventListener('DOMContentLoaded', () => {
+    initKioskMode().catch(error => {
+      console.error('[Kiosk] Initialization failed:', error);
+      showErrorOverlay('Initialization Failed', 'Failed to start kiosk mode. Please reload.');
+    });
+  });
+
+  // Clean up on page unload
+  window.addEventListener('beforeunload', () => {
+    if (debugInterval) clearInterval(debugInterval);
+    if (faceDetector) faceDetector.dispose();
+    if (stateMachine) stateMachine.dispose();
+  });
 </script>
 
 </body>
