@@ -1600,10 +1600,18 @@
       // Wait for joined-meeting event instead of relying on join() promise
       console.log('[Kiosk] Step 9: Attempting to join conversation...');
 
+      // Add diagnostic listeners for all Daily events
+      dailyCall.on('loading', () => console.log('[Kiosk] Daily event: loading'));
+      dailyCall.on('loaded', () => console.log('[Kiosk] Daily event: loaded'));
+      dailyCall.on('joining-meeting', () => console.log('[Kiosk] Daily event: joining-meeting'));
+      dailyCall.on('camera-error', (e) => console.error('[Kiosk] Daily event: camera-error', e));
+      dailyCall.on('access-state-updated', (e) => console.log('[Kiosk] Daily event: access-state-updated', e));
+
       const joinedPromise = new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
           dailyCall.off('joined-meeting', onJoined);
           dailyCall.off('error', onError);
+          console.error('[Kiosk] Join timeout - no joined-meeting event received after 30s');
           reject(new Error('Join timeout after 30 seconds'));
         }, 30000);
 
@@ -1624,8 +1632,20 @@
         dailyCall.on('joined-meeting', onJoined);
         dailyCall.on('error', onError);
 
-        // Start the join
-        dailyCall.join({ url: conversationUrl }).catch(reject);
+        // Start the join with camera and mic enabled
+        console.log('[Kiosk] Calling dailyCall.join() with URL:', conversationUrl);
+        dailyCall.join({
+          url: conversationUrl,
+          startVideoOff: false,
+          startAudioOff: false
+        })
+        .then((result) => {
+          console.log('[Kiosk] dailyCall.join() promise resolved:', result);
+        })
+        .catch((err) => {
+          console.error('[Kiosk] dailyCall.join() promise rejected:', err);
+          reject(err);
+        });
       });
 
       await joinedPromise;
