@@ -243,7 +243,11 @@ async def create_conversation(request: Request):
             properties={
                 "max_call_duration": 600,
                 "participant_left_timeout": 30,
-                "participant_absent_timeout": 120,
+                # Server-side backstop for a visitor who walks away. Local face
+                # detection normally ends the session in ~10s; this only fires if
+                # that fails (e.g. camera lost), so keep it tight to avoid paying
+                # for an empty room.
+                "participant_absent_timeout": 30,
                 "enable_recording": True,
                 "enable_transcription": True,
                 "enable_closed_captions": True,

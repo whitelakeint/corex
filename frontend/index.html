@@ -1450,12 +1450,85 @@
       el = document.createElement('div');
       el.id = 'card-body';
       el.className = 'card-body';
-      el.style.cssText =
-        'position:fixed; inset:0; z-index:5; opacity:0; transition:opacity 0.5s ease;';
       document.body.appendChild(el);
       console.log('[Kiosk] Created fallback fullscreen #card-body mount');
     }
+    // Force the mount to occupy EXACTLY the same box as #background-video
+    // (fixed, full viewport). The two layers must be pixel-identical or the
+    // crossfade visibly shifts/resizes. Applied every time so it holds whether
+    // the mount came from the card markup or was created here.
+    el.style.position = 'fixed';
+    el.style.top = '0';
+    el.style.left = '0';
+    el.style.width = '100vw';
+    el.style.height = '100vh';
+    el.style.margin = '0';
+    el.style.padding = '0';
+    el.style.border = 'none';
+    el.style.borderRadius = '0';
+    el.style.overflow = 'hidden';
+    el.style.background = '#000';
+    el.style.zIndex = '5';                       // above the attract video (z-index 0)
+    el.style.transition = 'opacity 0.6s ease';
+    if (el.style.opacity === '') el.style.opacity = '0';
     return el;
+  }
+
+  /**
+   * Our own <video> for the Tavus replica, created inside the conversation
+   * mount. In call-object mode Daily renders nothing itself — we attach the
+   * remote tracks here. Not muted: we need the replica's audio.
+   */
+  function getReplicaVideo(mount) {
+    let v = document.getElementById('replica-video');
+    if (!v) {
+      v = document.createElement('video');
+      v.id = 'replica-video';
+      v.autoplay = true;
+      v.playsInline = true;
+      v.setAttribute('playsinline', '');
+      v.style.cssText = 'width:100%; height:100%; object-fit:cover; background:#000; display:block;';
+      mount.appendChild(v);
+    } else if (v.parentNode !== mount) {
+      mount.appendChild(v);
+    }
+    return v;
+  }
+
+  /** Detach the replica stream so its last frame doesn't linger after a call. */
+  function clearReplicaVideo() {
+    const v = document.getElementById('replica-video');
+    if (!v) return;
+    try { v.pause(); } catch (e) { /* not playing */ }
+    v.srcObject = null;
+  }
+
+  /**
+   * Crossfade attract video -> live replica. Called only once the replica is
+   * actually painting frames, so the visitor never sees a black gap while the
+   * room connects. The attract loop stays underneath until the fade completes.
+   */
+  function revealConversation() {
+    const mount = getConversationMount();
+    const bgVideo = document.getElementById('background-video');
+    mount.style.opacity = '1';
+    setTimeout(() => {
+      if (bgVideo) bgVideo.style.display = 'none';   // only after the fade
+    }, 650);
+    console.log('[Kiosk] Replica live — crossfaded from attract video');
+  }
+
+  /** Crossfade live replica -> attract video (session over). */
+  function revealAttract() {
+    const mount = document.getElementById('card-body');
+    const bgVideo = document.getElementById('background-video');
+    if (bgVideo) {
+      bgVideo.style.display = 'block';
+      bgVideo.style.opacity = '1';
+      const p = bgVideo.play();
+      if (p && p.catch) p.catch(() => { /* autoplay policy */ });
+    }
+    if (mount) mount.style.opacity = '0';
   }
 
   /**
@@ -1467,18 +1540,11 @@
     console.log(`[Kiosk] State changed: ${oldState} → ${newState}`);
     updateDebugState(newState);
 
-    const bgVideo = document.getElementById('background-video');
-    const cardBody = getConversationMount();  // never null
-    const showVideo = (show) => { if (bgVideo) bgVideo.style.display = show ? 'block' : 'none'; };
-    const fadeVideo = (o) => { if (bgVideo) bgVideo.style.opacity = o; };
-
     switch (newState) {
       case 'IDLE':
-        showVideo(true);
-        fadeVideo('1');
-        cardBody.style.opacity = '0';
-        // Re-acquire the camera (released while Daily had the call) and resume
-        // presence detection. No-op if we still hold the camera.
+        // Attract loop back on screen, conversation layer hidden.
+        revealAttract();
+        // Re-acquire our own camera (the call had it) and resume detection.
         if (faceDetector) {
           faceDetector.resumeCamera('idle').catch(err =>
             console.error('[Kiosk] Failed to resume camera:', err));
@@ -1486,21 +1552,20 @@
         break;
 
       case 'STARTING_CONVERSATION':
-        fadeVideo('0');
-        cardBody.style.opacity = '0';
-        setTimeout(() => showVideo(false), 500);
+        // Deliberately do NOT touch the layers here. The attract loop keeps
+        // playing while the room connects — revealConversation() swaps only once
+        // the replica is actually painting frames, so there's no black gap.
         break;
 
       case 'CONVERSATION_ACTIVE':
-        showVideo(false);
-        cardBody.style.opacity = '1';
-        cardBody.style.transition = 'opacity 0.5s ease-in';
+        // Still nothing to show yet: the reveal is driven by the replica's video
+        // track (see renderReplica), not by the join completing.
         if (faceDetector) faceDetector.setDetectionMode('active');
         break;
 
       case 'ENDING_CONVERSATION':
       case 'ERROR_RECOVERY':
-        cardBody.style.opacity = '0';
+        revealAttract();
         break;
     }
   }
@@ -1554,17 +1619,17 @@
       }
       console.log('[Kiosk] Step 5: Daily.js library confirmed loaded');
 
-      // Create Daily.js iframe (mount self-heals if the card markup was removed)
+      // Mount for the conversation (self-heals if the card markup was removed)
       const cardBody = getConversationMount();
       console.log('[Kiosk] Step 6: conversation mount ready');
 
-      // Destroy any existing Daily frame before creating a new one
+      // Destroy any existing Daily instance before creating a new one
       if (dailyCall) {
-        console.log('[Kiosk] Step 6.5: Cleaning up existing Daily frame');
+        console.log('[Kiosk] Step 6.5: Cleaning up existing Daily call');
         try {
           await dailyCall.destroy();
         } catch (e) {
-          console.warn('[Kiosk] Error destroying existing frame:', e);
+          console.warn('[Kiosk] Error destroying existing call:', e);
         }
         dailyCall = null;
       }
@@ -1576,17 +1641,87 @@
         faceDetector.releaseCamera();
       }
 
-      dailyCall = window.Daily.createFrame(cardBody, {
-        iframeStyle: { width: '100%', height: '800px', border: 'none' },
-        showLeaveButton: false,
-        showFullscreenButton: false,
-        showParticipantsBar: false
+      // CALL OBJECT mode — deliberately NOT createFrame(). Daily's prebuilt UI
+      // renders a prejoin screen ("enter your name" + Join button) that a
+      // touchless kiosk can never click, so joined-meeting never fired and the
+      // join timed out after 30s. The call object has no UI at all: it joins
+      // programmatically and hands us raw tracks, which we render into our own
+      // <video>. Bonus: getUserMedia now runs on THIS origin instead of inside a
+      // third-party tavus.daily.co iframe, so our camera/mic grant applies.
+      dailyCall = window.Daily.createCallObject({
+        subscribeToTracksAutomatically: true
       });
-      console.log('[Kiosk] Step 7: Daily frame created');
+      console.log('[Kiosk] Step 7: Daily call object created (no iframe/prejoin)');
+
+      // Render the replica into our own fullscreen <video>.
+      const replicaVideo = getReplicaVideo(cardBody);
+
+      // Rebuild the element's stream from the remote participant's CURRENT
+      // tracks and re-assign srcObject. Rebuilding (rather than addTrack() on an
+      // already-assigned srcObject) is the reliable way to make the element
+      // actually render a newly-arrived track — Firefox in particular ignores
+      // tracks added to a live stream. Also catches the replica's video, which
+      // can land a few seconds after its audio.
+      let revealed = false;
+      const renderReplica = () => {
+        if (!dailyCall) return;
+        let remote;
+        try {
+          remote = Object.values(dailyCall.participants()).find(p => p && !p.local);
+        } catch (e) {
+          return;
+        }
+        if (!remote || !remote.tracks) return;
+
+        const tracks = [];
+        if (remote.tracks.video && remote.tracks.video.persistentTrack) {
+          tracks.push(remote.tracks.video.persistentTrack);
+        }
+        if (remote.tracks.audio && remote.tracks.audio.persistentTrack) {
+          tracks.push(remote.tracks.audio.persistentTrack);
+        }
+        if (!tracks.length) return;
+
+        console.log('[Kiosk] Rendering replica tracks:', tracks.map(t => t.kind).join(' + '));
+        replicaVideo.srcObject = new MediaStream(tracks);
+        replicaVideo.play().catch(err =>
+          console.warn('[Kiosk] Replica autoplay blocked (kiosk needs --autoplay-policy=no-user-gesture-required):', err));
+
+        // Only swap attract -> replica once the element is genuinely painting
+        // video frames. Revealing at join time is what produced the black screen.
+        if (!revealed && tracks.some(t => t.kind === 'video')) {
+          const onPlaying = () => {
+            replicaVideo.removeEventListener('playing', onPlaying);
+            if (revealed) return;
+            revealed = true;
+            revealConversation();
+          };
+          replicaVideo.addEventListener('playing', onPlaying);
+        }
+      };
+
+      // Safety net: if the replica never paints (e.g. video never publishes), we
+      // must not sit on the attract loop while a billed room runs invisibly.
+      setTimeout(() => {
+        if (!revealed && stateMachine && stateMachine.getState() === 'CONVERSATION_ACTIVE') {
+          console.warn('[Kiosk] Replica video never painted — revealing anyway');
+          revealed = true;
+          revealConversation();
+        }
+      }, 10000);
+
+      dailyCall.on('track-started', (ev) => {
+        if (ev && ev.participant && ev.participant.local) return;  // ignore our own cam/mic
+        console.log('[Kiosk] Replica track started:', ev && ev.track ? ev.track.kind : '?');
+        renderReplica();
+      });
+      dailyCall.on('track-stopped', () => renderReplica());
+      dailyCall.on('participant-joined', () => renderReplica());
+      dailyCall.on('participant-updated', () => renderReplica());
 
       // Listen for tool calls
       dailyCall.on('app-message', handleToolCall);
-      console.log('[Kiosk] Step 8: Tool call listener attached');
+      console.log('[Kiosk] Step 8: Track + tool call listeners attached');
 
       // If the room ends on its own (visitor walks away -> Tavus absent/duration
       // timeout, or the replica leaves), return to idle and free the camera.
@@ -1597,59 +1732,47 @@
         }
       });
 
-      // Wait for joined-meeting event instead of relying on join() promise
-      console.log('[Kiosk] Step 9: Attempting to join conversation...');
-
-      // Add diagnostic listeners for all Daily events
-      dailyCall.on('loading', () => console.log('[Kiosk] Daily event: loading'));
-      dailyCall.on('loaded', () => console.log('[Kiosk] Daily event: loaded'));
-      dailyCall.on('joining-meeting', () => console.log('[Kiosk] Daily event: joining-meeting'));
+      // Diagnostics
       dailyCall.on('camera-error', (e) => console.error('[Kiosk] Daily event: camera-error', e));
-      dailyCall.on('access-state-updated', (e) => console.log('[Kiosk] Daily event: access-state-updated', e));
+      dailyCall.on('error', (e) => console.error('[Kiosk] Daily event: error', e));
 
-      const joinedPromise = new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          dailyCall.off('joined-meeting', onJoined);
-          dailyCall.off('error', onError);
-          console.error('[Kiosk] Join timeout - no joined-meeting event received after 30s');
-          reject(new Error('Join timeout after 30 seconds'));
-        }, 30000);
+      console.log('[Kiosk] Step 9: Joining conversation:', conversationUrl);
 
-        const onJoined = (event) => {
-          clearTimeout(timeout);
-          dailyCall.off('error', onError);
-          console.log('[Kiosk] joined-meeting event received:', event);
-          resolve(event);
-        };
-
-        const onError = (error) => {
-          clearTimeout(timeout);
-          dailyCall.off('joined-meeting', onJoined);
-          console.error('[Kiosk] Daily.js error event:', error);
-          reject(error);
-        };
-
-        dailyCall.on('joined-meeting', onJoined);
-        dailyCall.on('error', onError);
-
-        // Start the join with camera and mic enabled
-        console.log('[Kiosk] Calling dailyCall.join() with URL:', conversationUrl);
+      // The call object's join() promise resolves once we're actually in the
+      // room — no prejoin screen to get stuck behind. Race it with a timeout so
+      // a genuine network stall still surfaces instead of hanging forever.
+      await Promise.race([
         dailyCall.join({
           url: conversationUrl,
           startVideoOff: false,
           startAudioOff: false
-        })
-        .then((result) => {
-          console.log('[Kiosk] dailyCall.join() promise resolved:', result);
-        })
-        .catch((err) => {
-          console.error('[Kiosk] dailyCall.join() promise rejected:', err);
-          reject(err);
-        });
-      });
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Join timeout after 30 seconds')), 30000))
+      ]);
 
-      await joinedPromise;
       console.log('[Kiosk] Step 10: Successfully joined conversation!');
+
+      // Keep presence detection alive DURING the call by borrowing Daily's own
+      // local camera track. Without this the detector is dark for the whole
+      // session, handleActiveDetection never runs, and "visitor walked away"
+      // can't end the room — it would linger until Tavus's absent/duration
+      // timeout. Reusing Daily's track means no second getUserMedia, so no
+      // device contention.
+      try {
+        const local = dailyCall.participants().local;
+        const localTrack = local && local.tracks && local.tracks.video
+          ? local.tracks.video.persistentTrack
+          : null;
+        if (localTrack && faceDetector) {
+          await faceDetector.useExternalStream(new MediaStream([localTrack]), 'active');
+        } else {
+          console.warn('[Kiosk] No local video track from Daily — presence detection paused for this call');
+        }
+      } catch (e) {
+        console.warn('[Kiosk] Could not attach call camera to detector:', e);
+      }
+
       setStatus('Active', 'active');
 
       return conversationId;
@@ -1668,6 +1791,7 @@
           await dailyCall.destroy().catch(() => {});
           dailyCall = null;
         }
+        clearReplicaVideo();
       } catch (e) {
         console.warn('[Kiosk] Cleanup: Daily teardown failed:', e);
       }
@@ -1717,6 +1841,7 @@
         dailyCall.destroy();
         dailyCall = null;
       }
+      clearReplicaVideo();
 
       // Reset UI
       setStatus('Ready', '');

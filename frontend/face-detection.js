@@ -24,6 +24,8 @@ class FaceDetectionManager {
     this.detectionCallback = null;
     this.currentFps = this.config.idleFps;
     this.inferenceTimeHistory = [];
+    this._ownsCamera = true;      // false while detecting from the call's stream
+    this._savedCallback = null;   // remembered across release/resume
   }
 
   /**
@@ -34,23 +36,20 @@ class FaceDetectionManager {
     try {
       console.log('[FaceDetection] Requesting camera access...');
 
-      // Request the mic too — NOT for detection, but to secure microphone
-      // permission up front (during the loader). Otherwise the Tavus/Daily call
-      // triggers its own mic prompt mid-join, and an unanswered prompt makes the
-      // join hang for 30s and time out. We stop the audio track immediately so
-      // the device isn't held; only the granted permission persists.
+      // Camera only. Presence detection never needs audio, so the kiosk must not
+      // hold a microphone while idle — the mic is only acquired by the Tavus call
+      // once a conversation actually starts.
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 1280 },
           height: { ideal: 720 },
           facingMode: 'user'
         },
-        audio: true
+        audio: false
       });
 
-      stream.getAudioTracks().forEach(track => track.stop());
-
       this.cameraStream = stream;
+      this._ownsCamera = true;   // we opened it, so we may stop it
 
       // Set up video element
       this.videoElement = document.getElementById('camera-feed');
@@ -177,24 +176,60 @@ class FaceDetectionManager {
   releaseCamera() {
     this._savedCallback = this.detectionCallback || this._savedCallback || null;
     this.stopDetection();
-    if (this.cameraStream) {
+    // Only stop tracks we actually OWN. During a call the stream belongs to
+    // Daily — stopping it would kill the visitor's camera mid-conversation.
+    if (this.cameraStream && this._ownsCamera !== false) {
       this.cameraStream.getTracks().forEach(track => track.stop());
-      this.cameraStream = null;
     }
+    this.cameraStream = null;
+    this._ownsCamera = true;
     if (this.videoElement) {
       this.videoElement.srcObject = null;
     }
-    console.log('[FaceDetection] Camera released (handed off to the call)');
+    console.log('[FaceDetection] Camera released');
   }
 
   /**
-   * Re-acquire the camera and resume detection with the remembered callback.
-   * No-op if the camera is already held.
+   * Detect from a stream we DON'T own — i.e. Daily's local camera track during
+   * an active call. This keeps presence detection running (so "visitor walked
+   * away" still ends the session) WITHOUT opening a second getUserMedia on the
+   * same device, which is what caused the join contention in the first place.
+   * @param {MediaStream} stream - a stream owned by the call
+   * @param {string} mode - 'idle' | 'active'
+   * @returns {Promise<boolean>} success
+   */
+  async useExternalStream(stream, mode = 'active') {
+    this.releaseCamera();          // drop our own stream if we hold one
+    this.cameraStream = stream;
+    this._ownsCamera = false;      // the call owns these tracks; never stop them
+    if (this.videoElement) {
+      this.videoElement.srcObject = stream;
+      try {
+        await this.videoElement.play();
+      } catch (e) {
+        console.warn('[FaceDetection] External stream play() failed:', e);
+      }
+    }
+    if (this._savedCallback) {
+      this.startDetection(this._savedCallback, mode);
+    }
+    console.log('[FaceDetection] Detecting from the call camera stream');
+    return true;
+  }
+
+  /**
+   * Re-acquire OUR OWN camera and resume detection with the remembered callback.
+   * No-op only if we already hold a live camera of our own — a dead or external
+   * (call-owned) stream is discarded and re-opened.
    * @param {string} mode - 'idle' | 'active'
    * @returns {Promise<boolean>} success
    */
   async resumeCamera(mode = 'idle') {
-    if (this.cameraStream) return true; // still holding it
+    const holdingLive = this.cameraStream && this._ownsCamera &&
+      this.cameraStream.getVideoTracks().some(t => t.readyState === 'live');
+    if (holdingLive) return true;
+
+    this.releaseCamera();          // clear a dead or call-owned stream
     const ok = await this.initCamera();
     if (!ok) return false;
     if (this._savedCallback) {
